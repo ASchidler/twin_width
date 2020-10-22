@@ -10,7 +10,6 @@ class TwinWidthEncoding(base_encoding.BaseEncoding):
         self.edge = None
         self.ord = None
         self.merge = None
-        self.root = None
         self.node_map = None
 
     def remap_graph(self, g):
@@ -34,16 +33,13 @@ class TwinWidthEncoding(base_encoding.BaseEncoding):
         self.edge = [[{} for _ in range(0, len(g.nodes) + 1)]  for _ in range(0, len(g.nodes) + 1)]
         self.ord = [{} for _ in range(0, len(g.nodes) + 1)]
         self.merge = [{} for _ in range(0, len(g.nodes) + 1)]
-        self.root = [self.add_var() if i > 0 else None for i in range(0, len(g.nodes) + 1)]
 
         for i in range(1, len(g.nodes) + 1):
             for j in range(i + 1, len(g.nodes) + 1):
                 for k in range(1, len(g.nodes) + 1):
                     self.edge[k][i][j] = self.add_var()
                 self.ord[i][j] = self.add_var()
-            for j in range(1, len(g.nodes) + 1):
-                if i != j:
-                    self.merge[i][j] = self.add_var()
+                self.merge[i][j] = self.add_var()
 
     def tord(self, i, j):
         if i < j:
@@ -67,14 +63,6 @@ class TwinWidthEncoding(base_encoding.BaseEncoding):
         g = self.remap_graph(g)
         self.init_var(g)
 
-        # Root
-        root_clause = []
-        for i in range(1, len(g.nodes) + 1):
-            root_clause.append(self.root[i])
-            for j in range(i+1, len(g.nodes) + 1):
-                self.add_clause(-self.root[i], -self.root[j])
-        self.add_clause(*root_clause)
-
         # Encode relationships
         # Transitivity
         for i in range(1, len(g.nodes) + 1):
@@ -89,28 +77,22 @@ class TwinWidthEncoding(base_encoding.BaseEncoding):
         
         # Merge/ord relationship
         for i in range(1, len(g.nodes) + 1):            
-            for j in range(1, len(g.nodes) + 1):
-                if i == j:
-                    continue
-                self.add_clause(self.tord(i, j), -self.merge[i][j])
+            for j in range(i+1, len(g.nodes) + 1):
+                self.add_clause(-self.merge[i][j], self.tord(i, j))
                 
         # single merge target
         for i in range(1, len(g.nodes) + 1):
-            clause = [self.root[i]]
-            for j in range(1, len(g.nodes) + 1):
-                if i == j:
-                    continue
+            clause = []
+            for j in range(i+1, len(g.nodes) + 1):
                 clause.append(self.merge[i][j])
                 for k in range(j+1, len(g.nodes) + 1):
-                    if k == i or k == j:
-                        continue
                     self.add_clause(-self.merge[i][j], -self.merge[i][k])
-                self.add_clause(*clause)
+            self.add_clause(*clause)
 
         # Create red arcs
         for i in range(1, len(g.nodes) + 1):
             inb = set(g.neighbors(i))
-            for j in range(1, len(g.nodes) + 1):
+            for j in range(i+1, len(g.nodes) + 1):
                 jnb = set(g.neighbors(j))
                 jnb.discard(i)
                 diff = jnb ^ inb  # Symmetric difference
@@ -130,7 +112,7 @@ class TwinWidthEncoding(base_encoding.BaseEncoding):
                         continue
 
                     for m in range(k+1, len(g.nodes) + 1):
-                        if i == m or k == m or j == m:
+                        if i == m or j == m:
                             continue
 
                         self.add_clause(-self.tord(i, j), -self.tord(j, k), -self.tord(j, m), -self.tedge(i, k, m),
@@ -138,19 +120,21 @@ class TwinWidthEncoding(base_encoding.BaseEncoding):
 
         # Transfer red arcs
         for i in range(1, len(g.nodes) + 1):
-            for j in range(1, len(g.nodes) + 1):
+            for j in range(i+1, len(g.nodes) + 1):
                 if i == j:
                     continue
 
                 for k in range(1, len(g.nodes) + 1):
                     if k == i or k == j:
                         continue
-
-                    # TODO: Is this correct
-                    self.add_clause(-self.merge[i][j], -self.tedge(i, i, k), self.tedge(i, j, k))
+                    for m in range(1, len(g.nodes) + 1):
+                        if m == i or m == k or m == j:
+                            continue
+                        # TODO: Is this correct
+                        self.add_clause(-self.merge[i][j], -self.tord(m, i), -self.tord(i, k), -self.tedge(m, i, k), self.tedge(i, j, k))
 
         # Encode counters
-        for i in range(1, len(g.nodes) + 1):
+        for i in range(1, len(g.nodes)): # As last one is the root, no counter needed
             # Map vars to full adjacency matrix
             vars = [[self.tedge(i, x, y) for x in range(1, len(g.nodes) + 1) if x != y] for y in range(1, len(g.nodes) + 1)]
             self.encode_cardinality_sat(d, vars)
@@ -174,10 +158,7 @@ class TwinWidthEncoding(base_encoding.BaseEncoding):
                 return 1 if model[self.ord[y][x]] else -1
 
         for i in range(1, len(g.nodes) + 1):
-            for j in range(1, len(g.nodes) + 1):
-                if i == j:
-                    continue
-
+            for j in range(i+1, len(g.nodes) + 1):
                 if model[self.merge[i][j]]:
                     if i in mg:
                         print("Error, double merge!")
