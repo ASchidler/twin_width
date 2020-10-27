@@ -130,7 +130,7 @@ class TwinWidthEncoding(base_encoding.BaseEncoding):
                     for m in range(1, len(g.nodes) + 1):
                         if m == i or m == k or m == j:
                             continue
-                        # TODO: Is this correct
+
                         self.add_clause(-self.merge[i][j], -self.tord(m, i), -self.tord(i, k), -self.tedge(m, i, k), self.tedge(i, j, k))
 
         # Encode counters
