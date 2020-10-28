@@ -29,7 +29,7 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
 
         return gn
 
-    def init_var(self, g):
+    def init_var(self, g, d):
         self.edge = [{} for _ in range(0, len(g.nodes) + 1)]
         self.red = [[{} for _ in range(0, len(g.nodes) + 1)] for _ in range(0, len(g.nodes) + 1)]
         self.ord = [{} for _ in range(0, len(g.nodes) + 1)]
@@ -41,10 +41,11 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
 
             for j in range(i + 1, len(g.nodes) + 1):
                 self.edge[i][j] = self.add_var()
-                self.merge[i][j] = self.add_var()
+                if i <= len(g.nodes) - d:
+                    self.merge[i][j] = self.add_var()
 
-                for k in range(j+1, len(g.nodes) + 1):
-                    self.red[i][j][k] = self.add_var()
+                    for k in range(j+1, len(g.nodes) + 1):
+                        self.red[i][j][k] = self.add_var()
 
     def encode_order(self, n):
         # Assign one node to each time step
@@ -73,22 +74,47 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
                         if g.has_edge(k, m):
                             self.add_clause(-self.ord[i][k], -self.ord[j][m], self.edge[i][j])
                             self.add_clause(-self.ord[i][m], -self.ord[j][k], self.edge[i][j])
-                        # TODO: The clauses should be optional, check if omitting them is faster...
                         else:
                             self.add_clause(-self.ord[i][k], -self.ord[j][m], -self.edge[i][j])
                             self.add_clause(-self.ord[i][m], -self.ord[j][k], -self.edge[i][j])
 
-    def break_symmetry(self, n, ts):
+    def encode_edges2(self, g):
+        n = len(g.nodes)
+        ep = [{} for _ in range(0, n+1)]
+        for i in range(1, n+1):
+            for j in range(1, n + 1):
+                if i != j:
+                    ep[i][j] = self.add_var()
+
+        for i in range(1, n+1):
+            for j in range(1, n+1):
+                nb = set(g.neighbors(j))
+                for k in range(1, n+1):
+                    if j == k or i == k:
+                        continue
+                    if k in nb:
+                        self.add_clause(-self.ord[i][j], ep[i][k])
+                    else:
+                        self.add_clause(-self.ord[i][j], -ep[i][k])
+
+        for i in range(1, n+1):
+            for j in range(1, n+1):
+                for k in range(i+1, n+1):
+                    if k != j:
+                        self.add_clause(-self.ord[i][j], -ep[k][j], self.edge[i][k])
+                        self.add_clause(-self.ord[i][j], ep[k][j], -self.edge[i][k])
+
+    def break_symmetry(self, n, d):
         # Merges must always occur in lexicographic order
         for i in range(1, n+1):
             for j in range(i+1, n+1):
-                for k in range(1, ts+1):
-                    for m in range(k+1, ts+1):
+                for k in range(1, n + 1 - d):
+                    for m in range(k+1, n + 1):
                         self.add_clause(-self.merge[k][m], -self.ord[m][i], -self.ord[k][j])
 
-    def encode_merge(self, n):
+    def encode_merge(self, n, d):
         # Exclude root
-        for i in range(1, n):
+        for i in range(1, n-d + 1):
             clause = []
             for j in range(i+1, n+1):
                 clause.append(self.merge[i][j])
@@ -96,8 +122,8 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
                     self.add_clause(-self.merge[i][j], -self.merge[i][k])
             self.add_clause(*clause)
 
-    def encode_red(self, n):
-        for i in range(1, n):
+    def encode_red(self, n, d):
+        for i in range(1, n - d + 1):
             for j in range(i+1, n+1):
                 for k in range(j+1, n+1):
                     if i > 1:
@@ -115,11 +141,12 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
     def encode(self, g, d):
         g = self.remap_graph(g)
         n = len(g.nodes)
-        self.init_var(g)
-        self.encode_edges(g)
+        self.init_var(g, d)
+        self.encode_edges2(g)
         self.encode_order(n)
-        self.encode_merge(n)
-        self.encode_red(n)
+        self.encode_merge(n, d)
+        self.encode_red(n, d)
+        #self.break_symmetry(n, d)
 
         def tred(u, x, y):
             if x < y:
@@ -128,8 +155,7 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
                 return self.red[u][y][x]
 
         # Encode counters
-        # TODO: This is actually only needed until n-d
-        for i in range(1, len(g.nodes)):  # As last one is the root, no counter needed
+        for i in range(1, len(g.nodes)-d+1):  # As last one is the root, no counter needed
             # Map vars to full adjacency matrix
             vars = [[tred(i, x, y) for x in range(i+1, len(g.nodes) + 1) if x != y] for y in range(i + 1, len(g.nodes) + 1)]
             self.encode_cardinality_sat(d, vars)
@@ -157,7 +183,7 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
         if len(set(od)) < len(od):
             print("Node twice in order")
 
-        for i in range(1, len(g.nodes) + 1):
+        for i in range(1, len(g.nodes) + 1 - d):
             for j in range(i+1, len(g.nodes) + 1):
                 if model[self.merge[i][j]]:
                     if od[i-1] in mg:
@@ -165,8 +191,8 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
                     mg[od[i-1]] = od[j-1]
 
         # Check edges relation...
-        for i in range(0, len(g.nodes)):
-            for j in range(i+1, len(g.nodes)):
+        for i in range(0, len(g.nodes)-d):
+            for j in range(i+1, len(g.nodes)-d):
                 if model[self.edge[i+1][j+1]] ^ g.has_edge(unmap[od[i]], unmap[od[j]]):
                     if model[self.edge[i+1][j+1]]:
                         print(f"Edge error: Unknown edge in model {i+1}, {j+1} = {od[i], od[j]}")
@@ -179,7 +205,7 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
 
         c_max = 0
         step = 1
-        for n in od[:-1]:
+        for n in od[:-d]:
             t = unmap[mg[n]]
             n = unmap[n]
             tn = set(g.neighbors(t))
@@ -213,14 +239,5 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
                     print(f"Exceeded bound in step {step}")
                 c_max = max(c_max, cc)
 
-            # Verify reds
-            for i in range(step+1, len(g.nodes)):
-                for j in range(i + 1, len(g.nodes)):
-                    u, v = unmap[od[i-1]], unmap[od[j-1]]
-                    if model[self.red[step][i][j]] ^ (g.has_edge(u, v) and g[u][v]['red']):
-                        if model[self.red[step][i][j]]:
-                            print(f"Unknown red edge in step {step}")
-                        else:
-                            print(f"Missing red edge in step {step}")
             step += 1
         print(f"Done {c_max}/{d}")
