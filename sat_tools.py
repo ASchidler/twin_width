@@ -168,6 +168,7 @@ class SatRunner:
                 inst_encoding = self.encoder(f)
                 inst_encoding.encode(g, c_bound)
             enc_size = max(enc_size, os.path.getsize(enc_file))
+
             p1 = self.solver.run(enc_file, model_file, memlimit)
 
             if timeout == 0:

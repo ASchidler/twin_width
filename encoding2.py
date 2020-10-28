@@ -73,6 +73,7 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
                         if g.has_edge(k, m):
                             self.add_clause(-self.ord[i][k], -self.ord[j][m], self.edge[i][j])
                             self.add_clause(-self.ord[i][m], -self.ord[j][k], self.edge[i][j])
+                        # TODO: The clauses should be optional, check if omitting them is faster...
                         else:
                             self.add_clause(-self.ord[i][k], -self.ord[j][m], -self.edge[i][j])
                             self.add_clause(-self.ord[i][m], -self.ord[j][k], -self.edge[i][j])
@@ -102,11 +103,14 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
                     if i > 1:
                         # Transfer red arcs from i to merge target
                         self.add_clause(-self.merge[i][j], -self.red[i-1][i][k], self.red[i][j][k])
+                        self.add_clause(-self.merge[i][k], -self.red[i-1][i][j], self.red[i][j][k])
                         # Transfer red arcs from other nodes
                         self.add_clause(-self.red[i-1][j][k], self.red[i][j][k])
                     # Create red arcs
                     self.add_clause(-self.merge[i][j], -self.edge[i][k], self.edge[j][k], self.red[i][j][k])
                     self.add_clause(-self.merge[i][j], -self.edge[j][k], self.edge[i][k], self.red[i][j][k])
+                    self.add_clause(-self.merge[i][k], -self.edge[i][j], self.edge[j][k], self.red[i][j][k])
+                    self.add_clause(-self.merge[i][k], -self.edge[j][k], self.edge[i][j], self.red[i][j][k])
 
     def encode(self, g, d):
         g = self.remap_graph(g)
@@ -124,7 +128,8 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
                 return self.red[u][y][x]
 
         # Encode counters
-        for i in range(1, len(g.nodes)): # As last one is the root, no counter needed
+        # TODO: This is actually only needed until n-d
+        for i in range(1, len(g.nodes)):  # As last one is the root, no counter needed
             # Map vars to full adjacency matrix
             vars = [[tred(i, x, y) for x in range(i+1, len(g.nodes) + 1) if x != y] for y in range(i + 1, len(g.nodes) + 1)]
             self.encode_cardinality_sat(d, vars)
@@ -173,6 +178,7 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
             g[u][v]['red'] = False
 
         c_max = 0
+        step = 1
         for n in od[:-1]:
             t = unmap[mg[n]]
             n = unmap[n]
@@ -199,5 +205,22 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
                 for v in g.neighbors(u):
                     if g[u][v]['red']:
                         cc += 1
+                        u2, v2 = od.index(self.node_map[u]) + 1, od.index(self.node_map[v]) + 1
+                        u2, v2 = min(u2, v2), max(u2, v2)
+                        if not model[self.red[step][u2][v2]]:
+                            print(f"Missing red edge in step {step}")
+                if cc > d:
+                    print(f"Exceeded bound in step {step}")
                 c_max = max(c_max, cc)
+
+            # Verify reds
+            for i in range(step+1, len(g.nodes)):
+                for j in range(i + 1, len(g.nodes)):
+                    u, v = unmap[od[i-1]], unmap[od[j-1]]
+                    if model[self.red[step][i][j]] ^ (g.has_edge(u, v) and g[u][v]['red']):
+                        if model[self.red[step][i][j]]:
+                            print(f"Unknown red edge in step {step}")
+                        else:
+                            print(f"Missing red edge in step {step}")
+            step += 1
         print(f"Done {c_max}/{d}")
