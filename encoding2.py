@@ -83,14 +83,13 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
         ep = [{} for _ in range(0, n+1)]
         for i in range(1, n+1):
             for j in range(1, n + 1):
-                if i != j:
-                    ep[i][j] = self.add_var()
+                ep[i][j] = self.add_var()
 
         for i in range(1, n+1):
             for j in range(1, n+1):
                 nb = set(g.neighbors(j))
                 for k in range(1, n+1):
-                    if j == k or i == k:
+                    if j == k:
                         continue
                     if k in nb:
                         self.add_clause(-self.ord[i][j], ep[i][k])
@@ -100,9 +99,8 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
         for i in range(1, n+1):
             for j in range(1, n+1):
                 for k in range(i+1, n+1):
-                    if k != j:
-                        self.add_clause(-self.ord[i][j], -ep[k][j], self.edge[i][k])
-                        self.add_clause(-self.ord[i][j], ep[k][j], -self.edge[i][k])
+                    self.add_clause(-self.ord[i][j], -ep[k][j], self.edge[i][k])
+                    self.add_clause(-self.ord[i][j], ep[k][j], -self.edge[i][k])
 
     def break_symmetry(self, n, d):
         # Merges must always occur in lexicographic order
@@ -146,7 +144,7 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
         self.encode_order(n)
         self.encode_merge(n, d)
         self.encode_red(n, d)
-        #self.break_symmetry(n, d)
+        # self.break_symmetry(n, d)
 
         def tred(u, x, y):
             if x < y:
