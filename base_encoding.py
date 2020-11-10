@@ -75,16 +75,28 @@ class BaseEncoding:
 
                 # Increment counter for each arc
                 for ln in range(1, min(len(ctr[i][j]), bound)):
-                    self.add_clause(-variables[i][j], -ctr[i][j-1][ln-1], ctr[i][j][ln])
+                    if type(variables[i][j]) is list:
+                        for x in variables[i][j]:
+                            self.add_clause(-x, -ctr[i][j - 1][ln - 1], ctr[i][j][ln])
+                    else:
+                        self.add_clause(-variables[i][j], -ctr[i][j-1][ln-1], ctr[i][j][ln])
 
         # Ensure that counter is initialized on the first arc
         for i in range(0, len(variables)):
             for j in range(0, len(variables[i]) - 1):
-                self.add_clause(-variables[i][j], ctr[i][j][0])
+                if type(variables[i][j]) is list:
+                    for x in variables[i][j]:
+                        self.add_clause(-x, ctr[i][j][0])
+                else:
+                    self.add_clause(-variables[i][j], ctr[i][j][0])
 
         # Conflict if target is exceeded
         for i in range(0, len(variables)):
             for j in range(bound, len(variables[i])):
                 # Since we start to count from 0, bound - 2
-                self.add_clause(-variables[i][j], -ctr[i][j-1][bound - 1])
+                if type(variables[i][j]) is list:
+                    for x in variables[i][j]:
+                        self.add_clause(-x, -ctr[i][j - 1][bound - 1])
+                else:
+                    self.add_clause(-variables[i][j], -ctr[i][j-1][bound - 1])
 

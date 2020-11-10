@@ -136,27 +136,79 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
                     self.add_clause(-self.merge[i][k], -self.edge[i][j], self.edge[j][k], self.red[i][j][k])
                     self.add_clause(-self.merge[i][k], -self.edge[j][k], self.edge[i][j], self.red[i][j][k])
 
-    def encode(self, g, d):
-        g = self.remap_graph(g)
+    def encode_perf1(self, g, d):
         n = len(g.nodes)
-        self.init_var(g, d)
-        self.encode_edges2(g)
-        self.encode_order(n)
-        self.encode_merge(n, d)
-        self.encode_red(n, d)
-        # self.break_symmetry(n, d)
 
+        for i in range(1, n + 1 - d):
+            for j in range(i + 1, n + 1):
+                self.add_clause(self.edge[i][j], -self.merge[i][j])
+
+    def encode_perf2(self, g, d):
+        n = len(g.nodes)
+
+        for i in range(1, n + 1 - d):
+            for j in range(i + 1, n + 1):
+                if i == 1:
+                    self.add_clause(self.edge[i][j], -self.merge[i][j])
+                else:
+                    self.add_clause(self.edge[i][j], self.red[i-1][i][j], -self.merge[i][j])
+
+    def encode_counters(self, g, d):
         def tred(u, x, y):
             if x < y:
                 return self.red[u][x][y]
             else:
                 return self.red[u][y][x]
 
-        # Encode counters
         for i in range(1, len(g.nodes)-d+1):  # As last one is the root, no counter needed
             # Map vars to full adjacency matrix
             vars = [[tred(i, x, y) for x in range(i+1, len(g.nodes) + 1) if x != y] for y in range(i + 1, len(g.nodes) + 1)]
             self.encode_cardinality_sat(d, vars)
+
+    def encode_counters2(self, g, d):
+        def tred(u, x, y):
+            if x < y:
+                return self.red[u][x][y]
+            else:
+                return self.red[u][y][x]
+
+        vars = []
+        for i in range(2, len(g.nodes)+1):
+            cvars = []
+            for j in range(2, len(g.nodes) + 1):
+                if i == j:
+                    continue
+
+                clause = []
+                for k in range(1, min(min(i, j), len(g.nodes) + 1 - d)):
+                    if j + k > len(g.nodes):
+                        break
+                    if j + k - 1 < i:
+                        clause.append(tred(k, i, j + k - 1))
+                    else:
+                        clause.append(tred(k, i, j + k))
+
+                cvars.append(clause)
+            vars.append(cvars)
+
+        self.encode_cardinality_sat(d, vars)
+
+    def encode(self, g, d):
+        g = self.remap_graph(g)
+        n = len(g.nodes)
+        self.init_var(g, d)
+        self.encode_edges2(g)
+        print(f"{self.clauses}")
+        self.encode_order(n)
+        print(f"{self.clauses}")
+        self.encode_merge(n, d)
+        print(f"{self.clauses}")
+        self.encode_red(n, d)
+        print(f"{self.clauses}")
+        self.encode_counters(g, d)
+        print(f"{self.clauses}")
+        #self.break_symmetry(n, d)
+        #self.encode_perf2(g, d)
 
         self.write_header()
 

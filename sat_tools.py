@@ -4,6 +4,7 @@ import sys
 import resource
 from datetime import time
 import time
+import solver_paths as sp
 
 
 def limit_memory(limit):
@@ -24,7 +25,7 @@ class BaseSolver:
 class MiniSatSolver(BaseSolver):
     def run(self, input_file, model_file, mem_limit=0):
         FNULL = open(os.devnull, 'w')
-        return subprocess.Popen(['minisat', '-verb=0', f'-mem-lim={mem_limit}', input_file, model_file], stdout=FNULL,
+        return subprocess.Popen([sp.minisat_path, '-verb=0', f'-mem-lim={mem_limit}', input_file, model_file], stdout=FNULL,
                                       stderr=subprocess.STDOUT, preexec_fn=lambda: limit_memory(mem_limit))
 
     def parse(self, f):
@@ -46,8 +47,8 @@ class GlucoseSolver(BaseSolver):
     def run(self, input_file, model_file, mem_limit=0):
         FNULL = open(os.devnull, 'w')
         # , f'-mem-lim={mem_limit}'
-        return subprocess.Popen(['/home/aschidler/Downloads/glucose-syrup-4.1/simp/glucose', '-model', '-verb=0', input_file, model_file], stdout=FNULL,
-                                      stderr=subprocess.STDOUT)
+        return subprocess.Popen([sp.glucose_path, '-model', '-verb=0', input_file, model_file], stdout=FNULL,
+                                stderr=subprocess.STDOUT)
 
     def parse(self, f):
         first = f.readline()
@@ -67,7 +68,7 @@ class GlucoseSolver(BaseSolver):
 class CadicalSolver(BaseSolver):
     def run(self, input_file, model_file, mem_limit=0):
         out_file = open(model_file, "w")
-        return subprocess.Popen(['cadical', '-q', input_file], stdout=out_file,
+        return subprocess.Popen([sp.cadical_path, '-q', input_file], stdout=out_file,
                                 #      stderr=subprocess.STDOUT, preexec_fn=lambda: limit_memory(mem_limit)
                                 )
 
@@ -95,9 +96,9 @@ class WrMaxsatSolver(BaseSolver):
     def run(self, input_file, model_file, timeout=0):
         with open(model_file, "w") as mf:
             if timeout == 0:
-                return subprocess.Popen(['uwrmaxsat', input_file, '-m'], stdout=mf)
+                return subprocess.Popen([sp.uwrmaxsat_path, input_file, '-m'], stdout=mf)
             else:
-                return subprocess.Popen(['uwrmaxsat', input_file, '-m', f'-cpu-lim={timeout}'],
+                return subprocess.Popen([sp.uwrmaxsat_path, input_file, '-m', f'-cpu-lim={timeout}'],
                                         stdout=mf)
 
     def parse(self, f):
