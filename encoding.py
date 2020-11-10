@@ -61,6 +61,7 @@ class TwinWidthEncoding(base_encoding.BaseEncoding):
 
     def encode(self, g, d):
         g = self.remap_graph(g)
+        n = len(g.nodes)
         self.init_var(g)
 
         # Encode relationships
@@ -102,6 +103,7 @@ class TwinWidthEncoding(base_encoding.BaseEncoding):
                     self.add_clause(-self.merge[i][j], -self.tord(i, k), self.tedge(i, j, k))
 
         self.encode_reds2(g)
+        #self.perf(n)
 
         # Encode counters
         for i in range(1, len(g.nodes)): # As last one is the root, no counter needed
@@ -145,6 +147,17 @@ class TwinWidthEncoding(base_encoding.BaseEncoding):
                         self.add_clause(-self.merge[i][j], -self.tord(m, i), -self.tord(i, k), -self.tedge(m, i, k),
                                         self.tedge(i, j, k))
 
+    def perf(self, n):
+        for i in range(1, n+1):
+            for j in range(1, n + 1):
+                if i == j:
+                    continue
+                for k in range(1, n+1):
+                    if i == k or j == k:
+                        continue
+
+                    self.add_clause(self.tord(i, j), -self.tedge(i, j, k))
+
     def encode_reds2(self, g):
         auxes = {}
         for i in range(1, len(g.nodes) + 1):
@@ -158,8 +171,7 @@ class TwinWidthEncoding(base_encoding.BaseEncoding):
                     if k == j or i == k:
                         continue
 
-                    self.add_clause(-self.tord(k, i), -self.tord(i, j), -self.tedge(k, i, j), c_aux)
-                    self.add_clause(-self.tord(k, j), -self.tord(j, i), -self.tedge(k, i, j), c_aux)
+                    self.add_clause(-self.tord(k, i), -self.tord(k, j), -self.tedge(k, i, j), c_aux)
 
         # Maintain red arcs
         for i in range(1, len(g.nodes) + 1):
@@ -189,9 +201,10 @@ class TwinWidthEncoding(base_encoding.BaseEncoding):
                         continue
 
                     if i < k:
-                        self.add_clause(-self.merge[i][j], -auxes[i][k], self.tedge(i, j, k))
+                        # We can make this ternary by doubling the aux vars and implying i < k that way
+                        self.add_clause(-self.merge[i][j], -self.tord(i, k), -auxes[i][k], self.tedge(i, j, k))
                     else:
-                        self.add_clause(-self.merge[i][j], -auxes[k][i], self.tedge(i, j, k))
+                        self.add_clause(-self.merge[i][j], -self.tord(i, k), -auxes[k][i], self.tedge(i, j, k))
 
     def decode(self, model, g, d):
         g = g.copy()
