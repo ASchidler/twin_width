@@ -14,8 +14,8 @@ print(f"{len(g.nodes)} {len(g.edges)}")
 ub = heuristic.get_ub(g)
 print(f"UB {ub}")
 
-st = sat_tools.SatRunner(encoding.TwinWidthEncoding, sat_tools.GlucoseSolver())
-#st = sat_tools.SatRunner(encoding2.TwinWidthEncoding2, sat_tools.GlucoseSolver())
+#st = sat_tools.SatRunner(encoding.TwinWidthEncoding, sat_tools.GlucoseSolver())
+st = sat_tools.SatRunner(encoding2.TwinWidthEncoding2, sat_tools.GlucoseSolver())
 r, _ = st.run(ub, g)
 
 

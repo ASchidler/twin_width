@@ -103,12 +103,19 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
                     self.add_clause(-self.ord[i][j], ep[k][j], -self.edge[i][k])
 
     def break_symmetry(self, n, d):
+        ep = [{} for _ in range(0, n + 1)]
+        for i in range(1, n + 1 - d):
+            for k in range(1, n + 1):
+                caux = self.add_var()
+                ep[i][k] = caux
+                for j in range(i + 1, n + 1):
+                    self.add_clause(-self.merge[i][j], -self.ord[j][k], caux)
+
         # Merges must always occur in lexicographic order
-        for i in range(1, n+1):
-            for j in range(i+1, n+1):
-                for k in range(1, n + 1 - d):
-                    for m in range(k+1, n + 1):
-                        self.add_clause(-self.merge[k][m], -self.ord[m][i], -self.ord[k][j])
+        for i in range(1, n + 1 - d):
+            for j in range(1, n+1):
+                for k in range(j+1, n + 1):
+                    self.add_clause(-ep[i][j], -self.ord[i][k])
 
     def encode_merge(self, n, d):
         # Exclude root
@@ -137,6 +144,7 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
                     self.add_clause(-self.merge[i][k], -self.edge[j][k], self.edge[i][j], self.red[i][j][k])
 
     def encode_perf1(self, g, d):
+        # This is a heuristic, not correct
         n = len(g.nodes)
 
         for i in range(1, n + 1 - d):
@@ -144,6 +152,7 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
                 self.add_clause(self.edge[i][j], -self.merge[i][j])
 
     def encode_perf2(self, g, d):
+        # This is a heuristic, not correct
         n = len(g.nodes)
 
         for i in range(1, n + 1 - d):
@@ -166,6 +175,7 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
             self.encode_cardinality_sat(d, vars)
 
     def encode_counters2(self, g, d):
+        # This is incorrect
         def tred(u, x, y):
             if x < y:
                 return self.red[u][x][y]
@@ -207,9 +217,9 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
         print(f"{self.clauses}")
         self.encode_counters(g, d)
         print(f"{self.clauses}")
-        #self.break_symmetry(n, d)
+        self.break_symmetry(n, d)
         #self.encode_perf2(g, d)
-
+        print(f"{self.clauses} / {self.vars}")
         self.write_header()
 
     def decode(self, model, g, d):

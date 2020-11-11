@@ -110,7 +110,7 @@ class TwinWidthEncoding(base_encoding.BaseEncoding):
             # Map vars to full adjacency matrix
             vars = [[self.tedge(i, x, y) for x in range(1, len(g.nodes) + 1) if x != y] for y in range(1, len(g.nodes) + 1)]
             self.encode_cardinality_sat(d, vars)
-        print(f"{self.clauses}")
+        print(f"{self.clauses} / {self.vars}")
         self.write_header()
 
     def encode_reds1(self, g):
