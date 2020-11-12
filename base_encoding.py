@@ -77,7 +77,10 @@ class BaseEncoding:
                 for ln in range(1, min(len(ctr[i][j]), bound)):
                     if type(variables[i][j]) is list:
                         for x in variables[i][j]:
-                            self.add_clause(-x, -ctr[i][j - 1][ln - 1], ctr[i][j][ln])
+                            if type(x) is list:
+                                self.add_clause(*[-y for y in x], -ctr[i][j - 1][ln - 1], ctr[i][j][ln])
+                            else:
+                                self.add_clause(-x, -ctr[i][j - 1][ln - 1], ctr[i][j][ln])
                     else:
                         self.add_clause(-variables[i][j], -ctr[i][j-1][ln-1], ctr[i][j][ln])
 
@@ -86,7 +89,10 @@ class BaseEncoding:
             for j in range(0, len(variables[i]) - 1):
                 if type(variables[i][j]) is list:
                     for x in variables[i][j]:
-                        self.add_clause(-x, ctr[i][j][0])
+                        if type(x) is list:
+                            self.add_clause(*[-y for y in x], ctr[i][j][0])
+                        else:
+                            self.add_clause(-x, ctr[i][j][0])
                 else:
                     self.add_clause(-variables[i][j], ctr[i][j][0])
 
@@ -96,7 +102,45 @@ class BaseEncoding:
                 # Since we start to count from 0, bound - 2
                 if type(variables[i][j]) is list:
                     for x in variables[i][j]:
-                        self.add_clause(-x, -ctr[i][j - 1][bound - 1])
+                        if type(x) is list:
+                            self.add_clause(*[-y for y in x], -ctr[i][j - 1][bound - 1])
+                        else:
+                            self.add_clause(-x, -ctr[i][j - 1][bound - 1])
                 else:
                     self.add_clause(-variables[i][j], -ctr[i][j-1][bound - 1])
 
+    def amo_pair(self, vars, elo=False):
+        if elo:
+            self.add_clause(*vars)
+
+        for i in range(0, len(vars)):
+            for j in range(i+1, len(vars)):
+                self.add_clause(-vars[i], -vars[j])
+
+    def amo_commander(self, vars, elo=False, m=2):
+        # Separate into list
+        cnt = 0
+        groups = []
+        while cnt < len(vars):
+            cg = []
+            for i in range(0, min(m, len(vars)-cnt)):
+                cg.append(vars[cnt+i])
+            groups.append(cg)
+            cnt += m
+
+        cmds = []
+        # Encode commanders
+        for cg in groups:
+            if len(cg) > 1:
+                ncmd = self.add_var()
+                cmds.append(ncmd)
+                cg.append(-ncmd)
+                self.amo_pair(cg, elo=True)
+            else:
+                cmds.append(cg[0])
+
+        # Recursive call?
+        if len(cmds) < 2 * m:
+            self.amo_pair(cmds, elo=elo)
+        else:
+            self.amo_commander(cmds, elo=elo, m=m)

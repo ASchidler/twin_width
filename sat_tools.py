@@ -25,7 +25,7 @@ class BaseSolver:
 class MiniSatSolver(BaseSolver):
     def run(self, input_file, model_file, mem_limit=0):
         FNULL = open(os.devnull, 'w')
-        return subprocess.Popen([sp.minisat_path, '-verb=0', f'-mem-lim={mem_limit}', input_file, model_file], stdout=FNULL,
+        return subprocess.Popen([sp.minisat_path, '-verb=0', input_file, model_file], stdout=FNULL,
                                       stderr=subprocess.STDOUT, preexec_fn=lambda: limit_memory(mem_limit))
 
     def parse(self, f):
@@ -69,6 +69,30 @@ class CadicalSolver(BaseSolver):
     def run(self, input_file, model_file, mem_limit=0):
         out_file = open(model_file, "w")
         return subprocess.Popen([sp.cadical_path, '-q', input_file], stdout=out_file,
+                                #      stderr=subprocess.STDOUT, preexec_fn=lambda: limit_memory(mem_limit)
+                                )
+
+    def parse(self, f):
+        first = f.readline()
+        if first.startswith("s UNSAT"):
+            return None
+
+        # TODO: This could be faster using a list...
+        model = {}
+        for _, ln in enumerate(f):
+            if ln.startswith("v "):
+                vars = ln.split()
+                for v in vars[1:]:
+                    val = int(v)
+                    model[abs(val)] = val > 0
+
+        return model
+
+
+class KissatSolver(BaseSolver):
+    def run(self, input_file, model_file, mem_limit=0):
+        out_file = open(model_file, "w")
+        return subprocess.Popen([sp.kissat_path, '-q', input_file], stdout=out_file,
                                 #      stderr=subprocess.STDOUT, preexec_fn=lambda: limit_memory(mem_limit)
                                 )
 

@@ -83,12 +83,8 @@ class TwinWidthEncoding(base_encoding.BaseEncoding):
                 
         # single merge target
         for i in range(1, len(g.nodes) + 1):
-            clause = []
-            for j in range(i+1, len(g.nodes) + 1):
-                clause.append(self.merge[i][j])
-                for k in range(j+1, len(g.nodes) + 1):
-                    self.add_clause(-self.merge[i][j], -self.merge[i][k])
-            self.add_clause(*clause)
+            # self.amo_pair([self.merge[i][j] for j in range(i+1, len(g.nodes)+1)], elo=True)
+            self.amo_commander([self.merge[i][j] for j in range(i + 1, len(g.nodes) + 1)], elo=True)
 
         # Create red arcs
         for i in range(1, len(g.nodes) + 1):

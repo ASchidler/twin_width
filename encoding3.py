@@ -32,14 +32,15 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
     def init_var(self, g, d):
         self.edge = [{} for _ in range(0, len(g.nodes) + 1)]
         self.red = [[{} for _ in range(0, len(g.nodes) + 1)] for _ in range(0, len(g.nodes) + 1)]
-        self.ord = [{} for _ in range(0, len(g.nodes) + 1)]
+        import math
+
+        self.length = int(math.ceil(math.log2(len(g.nodes))))
+        self.new_ord = {}
+
         self.merge = [{} for _ in range(0, len(g.nodes) + 1)]
 
         for i in range(1, len(g.nodes) + 1):
-            for j in range(1, len(g.nodes) + 1):
-                pass
-                self.ord[i][j] = self.add_var()
-
+            self.new_ord[i] = [self.add_var() for _ in range(0, self.length)]
             for j in range(i + 1, len(g.nodes) + 1):
                 self.edge[i][j] = self.add_var()
                 if i <= len(g.nodes) - d:
@@ -57,6 +58,64 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
         # Make sure each node is assigned only once...
         for i in range(1, n+1):
             self.amo_commander([self.ord[j][i] for j in range(1, n + 1)], elo=False)
+
+    def encode_order2(self, g, n):
+        # Unique
+        # for i in range(1, n+1):
+        #     for j in range(i+1, n+1):
+        #         clause = []
+        #
+        #         for k in range(0, self.length):
+        #             cv = self.add_var()
+        #             clause.append(cv)
+        #             self.add_clause(-self.new_ord[i][k], self.new_ord[j][k], cv)
+        #             self.add_clause(self.new_ord[i][k], -self.new_ord[j][k], cv)
+        #             self.add_clause(-cv, -self.new_ord[i][k], -self.new_ord[j][k])
+        #             self.add_clause(-cv, self.new_ord[i][k], self.new_ord[j][k])
+        #         self.add_clause(*clause)
+
+        def to_clause(x, y):
+            cod = bin(y - 1)[2:].zfill(self.length)
+            clause = [self.new_ord[x][idx] * (1 if cod[idx] == "0" else -1) for idx in range(0, self.length)]
+            return clause
+
+        for i in range(1, n+1):
+            for j in range(1, n+1):
+                if i == j:
+                    continue
+                for k in range(1, n+1):
+                    cl1 = to_clause(i, k)
+                    cl2 = to_clause(j, k)
+                    self.add_clause(*cl1, *cl2)
+
+        # Prohibit unknown numbers
+        for p in range(n+1, 2**self.length+1):
+            for i in range(1, n + 1):
+                self.add_clause(*to_clause(i, p))
+
+        # Edges
+        ep = [{} for _ in range(0, n + 1)]
+        for i in range(1, n + 1):
+            for j in range(1, n + 1):
+                ep[i][j] = self.add_var()
+
+        for i in range(1, n + 1):
+            for j in range(1, n + 1):
+                nb = set(g.neighbors(j))
+                for k in range(1, n + 1):
+                    if j == k:
+                        continue
+
+                    if k in nb:
+                        self.add_clause(*to_clause(i, j), ep[i][k])
+                    else:
+                        self.add_clause(*to_clause(i, j), -ep[i][k])
+
+        for i in range(1, n + 1):
+            for j in range(1, n + 1):
+                for k in range(i + 1, n + 1):
+                    self.add_clause(*to_clause(i, j), -ep[k][j], self.edge[i][k])
+                    self.add_clause(*to_clause(i, j), ep[k][j], -self.edge[i][k])
 
     def encode_edges(self, g):
         n = len(g.nodes)
@@ -171,9 +230,9 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
         g = self.remap_graph(g)
         n = len(g.nodes)
         self.init_var(g, d)
-        self.encode_edges2(g)
-        print(f"{self.clauses}")
-        self.encode_order(n)
+        # self.encode_edges2(g)
+        # print(f"{self.clauses}")
+        self.encode_order2(g, n)
         print(f"{self.clauses}")
         self.encode_merge(n, d)
         print(f"{self.clauses}")
@@ -198,11 +257,11 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
         od = []
 
         for i in range(1, len(g.nodes) + 1):
-            for j in range(1, len(g.nodes) + 1):
-                if model[self.ord[i][j]]:
-                    if len(od) >= i:
-                        print("Double order")
-                    od.append(j)
+            c_str = ""
+            for j in range(0, self.length):
+                c_str += "1" if model[self.new_ord[i][j]] else "0"
+            od.append(int(c_str, 2)+1)
+
             if len(od) < i:
                 print("Order missing")
         if len(set(od)) < len(od):

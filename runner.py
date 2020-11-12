@@ -1,6 +1,7 @@
 import parser
 import encoding
 import encoding2
+import encoding3
 import os
 import sat_tools
 import sys
@@ -15,7 +16,11 @@ ub = heuristic.get_ub(g)
 print(f"UB {ub}")
 
 #st = sat_tools.SatRunner(encoding.TwinWidthEncoding, sat_tools.GlucoseSolver())
-st = sat_tools.SatRunner(encoding2.TwinWidthEncoding2, sat_tools.GlucoseSolver())
+#st = sat_tools.SatRunner(encoding.TwinWidthEncoding, sat_tools.CadicalSolver())
+st = sat_tools.SatRunner(encoding.TwinWidthEncoding, sat_tools.KissatSolver())
+#st = sat_tools.SatRunner(encoding.TwinWidthEncoding, sat_tools.MiniSatSolver())
+#st = sat_tools.SatRunner(encoding2.TwinWidthEncoding2, sat_tools.CadicalSolver())
+#st = sat_tools.SatRunner(encoding3.TwinWidthEncoding2, sat_tools.CadicalSolver())
 r, _ = st.run(ub, g)
 
 
