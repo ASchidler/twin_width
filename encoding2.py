@@ -37,7 +37,6 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
 
         for i in range(1, len(g.nodes) + 1):
             for j in range(1, len(g.nodes) + 1):
-                pass
                 self.ord[i][j] = self.add_var()
 
             for j in range(i + 1, len(g.nodes) + 1):
@@ -52,11 +51,11 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
         # TODO: Encode this as binary?
         # Assign one node to each time step
         for i in range(1, n + 1):
-            self.amo_commander([self.ord[i][j] for j in range(1, n+1)], elo=True)
+            self.amo_commander([self.ord[i][j] for j in range(1, n+1)], alo=True)
 
         # Make sure each node is assigned only once...
         for i in range(1, n+1):
-            self.amo_commander([self.ord[j][i] for j in range(1, n + 1)], elo=False)
+            self.amo_commander([self.ord[j][i] for j in range(1, n + 1)], alo=False)
 
     def encode_edges(self, g):
         n = len(g.nodes)
@@ -115,7 +114,7 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
     def encode_merge(self, n, d):
         # Exclude root
         for i in range(1, n-d + 1):
-            self.amo_commander([self.merge[i][j] for j in range(i+1, n + 1)], elo=True)
+            self.amo_commander([self.merge[i][j] for j in range(i+1, n + 1)], alo=True)
 
     def encode_red(self, n, d):
         for i in range(1, n - d + 1):
@@ -179,7 +178,7 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
         print(f"{self.clauses}")
         self.encode_red(n, d)
         print(f"{self.clauses}")
-        self.encode_counters(g, d)
+        self.encode_counters2(g, d)
         print(f"{self.clauses}")
         self.stream.flush()
         #self.break_symmetry(n, d)

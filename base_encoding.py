@@ -109,15 +109,15 @@ class BaseEncoding:
                 else:
                     self.add_clause(-variables[i][j], -ctr[i][j-1][bound - 1])
 
-    def amo_pair(self, vars, elo=False):
-        if elo:
+    def amo_pair(self, vars, alo=False):
+        if alo:
             self.add_clause(*vars)
 
         for i in range(0, len(vars)):
             for j in range(i+1, len(vars)):
                 self.add_clause(-vars[i], -vars[j])
 
-    def amo_commander(self, vars, elo=False, m=2):
+    def amo_commander(self, vars, alo=False, m=2):
         # Separate into list
         cnt = 0
         groups = []
@@ -135,12 +135,12 @@ class BaseEncoding:
                 ncmd = self.add_var()
                 cmds.append(ncmd)
                 cg.append(-ncmd)
-                self.amo_pair(cg, elo=True)
+                self.amo_pair(cg, alo=True)
             else:
                 cmds.append(cg[0])
 
         # Recursive call?
         if len(cmds) < 2 * m:
-            self.amo_pair(cmds, elo=elo)
+            self.amo_pair(cmds, alo=alo)
         else:
-            self.amo_commander(cmds, elo=elo, m=m)
+            self.amo_commander(cmds, alo=alo, m=m)
