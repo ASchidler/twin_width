@@ -51,3 +51,66 @@ def get_ub(g):
             c_max = max(c_max, cc)
 
     return c_max
+
+
+def get_ub2(g):
+    additional_reds = {}
+    for n1 in g.nodes:
+        if n1 not in additional_reds:
+            additional_reds[n1] = {}
+        n1nb = set(g.neighbors(n1))
+        for n2 in g.nodes:
+            if n2 > n1:
+                n2nb = set(g.neighbors(n2))
+                reds = n1nb ^ n2nb
+                reds.discard(n1)
+                reds.discard(n2)
+                additional_reds[n1][n2] = reds
+
+    mg = {}
+    od = []
+    g = g.copy()
+    for u, v in g.edges:
+        g[u][v]['red'] = False
+    ub = 0
+    reds = {x: set() for x in g.nodes}
+
+    while len(g.nodes) > ub:
+        c_min = (maxsize, None)
+        for n1 in g.nodes:
+            for n2 in g.nodes:
+                if n2 > n1:
+                    new_test = len(additional_reds[n1][n2] | reds[n1] | reds[n2])
+                    if new_test < c_min[0]:
+                        c_min = (new_test, (n1, n2))
+
+        n1, n2 = c_min[1]
+        od.append(n1)
+        mg[n1] = n2
+
+        nbs = set(g.neighbors(n1)) ^ set(g.neighbors(n2))
+        nbs.discard(n1)
+        nbs.discard(n2)
+        for cn in nbs:
+            reds[cn].add(n2)
+            reds[n2].add(cn)
+            if g.has_edge(n2, cn):
+                g[n2][cn]['red'] = True
+            else:
+                g.add_edge(n2, cn, red=True)
+
+        for cn in g.neighbors(n1):
+            if g[n1][cn]['red']:
+                reds[cn].discard(n1)
+
+        g.remove_node(n1)
+
+        # Count reds...
+        for u in g.nodes:
+            cc = 0
+            for v in g.neighbors(u):
+                if g[u][v]['red']:
+                    cc += 1
+            ub = max(ub, cc)
+
+    return ub

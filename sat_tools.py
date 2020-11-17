@@ -171,11 +171,14 @@ def add_cardinality_constraint(target_arr, limit, encoder):
 
 
 class SatRunner:
-    def __init__(self, encoder, solver, base_path=".", tmp_file=None):
+    def __init__(self, encoder, solver, base_path=".", tmp_file=None, params=None):
+        if params is None:
+            params = []
         self.base_path = base_path
         self.tmp_file = tmp_file if tmp_file is not None else os.getpid()
         self.solver = solver
         self.encoder = encoder
+        self.params = params
 
     def run(self, starting_bound, g, timeout=0, memlimit=0, u_bound=sys.maxsize):
         l_bound = 0
@@ -190,7 +193,7 @@ class SatRunner:
         while l_bound < u_bound:
             # print(f"Running with limit {c_bound}")
             with open(enc_file, "w") as f:
-                inst_encoding = self.encoder(f)
+                inst_encoding = self.encoder(f, *self.params)
                 inst_encoding.encode(g, c_bound)
             enc_size = max(enc_size, os.path.getsize(enc_file))
 
