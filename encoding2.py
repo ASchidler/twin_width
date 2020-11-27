@@ -111,6 +111,34 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
                 for k in range(j+1, n + 1):
                     self.add_clause(-ep[i][j], -self.ord[i][k])
 
+    def skip_doublehops(self, n, d):
+        for i in range(1, n-d + 1):
+            for j in range(i+1, n+1):
+                vars = []
+                for k in range(i+1, n+1):
+                    if j == k:
+                        continue
+
+                    caux = self.add_var()
+                    if i > 1:
+                        self.add_clause(-caux, self.edge[i][k], self.red[i-1][i][k])
+                        if j < k:
+                            self.add_clause(-caux, self.edge[j][k], self.red[i-1][j][k])
+                        else:
+                            self.add_clause(-caux, self.edge[k][j], self.red[i - 1][k][j])
+                    else:
+                        self.add_clause(-caux, self.edge[i][k])
+                        if j < k:
+                            self.add_clause(-caux, self.edge[j][k])
+                        else:
+                            self.add_clause(-caux, self.edge[k][j])
+                    vars.append(caux)
+
+                if i > 1:
+                    self.add_clause(-self.merge[i][j], self.edge[i][j], self.red[i-1][i][j], *vars)
+                else:
+                    self.add_clause(-self.merge[i][j], self.edge[i][j], *vars)
+
     def encode_merge(self, n, d):
         # Exclude root
         for i in range(1, n-d + 1):
@@ -178,9 +206,12 @@ class TwinWidthEncoding2(base_encoding.BaseEncoding):
         print(f"{self.clauses}")
         self.encode_red(n, d)
         print(f"{self.clauses}")
-        self.encode_counters2(g, d)
+        self.encode_counters(g, d)
+        print(f"{self.clauses}")
+        self.skip_doublehops(n ,d)
         print(f"{self.clauses}")
         self.stream.flush()
+
         #self.break_symmetry(n, d)
         #self.encode_perf2(g, d)
         print(f"{self.clauses} / {self.vars}")

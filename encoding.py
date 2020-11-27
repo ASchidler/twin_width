@@ -203,21 +203,22 @@ class TwinWidthEncoding(base_encoding.BaseEncoding):
                     else:
                         self.add_clause(-self.merge[i][j], -self.tord(i, k), -auxes[k][i], self.tedge(i, j, k))
 
-        n = len(g.nodes)
-        for i in range(1, n+1):
-            inb = set(g.neighbors(i))
-            for j in range(i+1, n+1):
-                # Not onehop reachable
-                if g.has_edge(i, j) or len(inb & set(g.neighbors(j))) == 0:
-                    vars = []
-                    for k in range(1, n+1):
-                        if i == k or j == k:
-                            continue
-                        caux = self.add_var()
-                        self.add_clause(-caux, auxes[i][k] if i < k else auxes[k][i])
-                        self.add_clause(-caux, self.tedge(i, j, k))
-                        vars.append(caux)
-                    self.add_clause(-self.merge[i][j], auxes[i][j], *vars)
+        # Check if valid
+        # n = len(g.nodes)
+        # for i in range(1, n+1):
+        #     inb = set(g.neighbors(i))
+        #     for j in range(i+1, n+1):
+        #         # Not onehop reachable
+        #         if g.has_edge(i, j) or len(inb & set(g.neighbors(j))) == 0:
+        #             vars = []
+        #             for k in range(1, n+1):
+        #                 if i == k or j == k:
+        #                     continue
+        #                 caux = self.add_var()
+        #                 self.add_clause(-caux, auxes[i][k] if i < k else auxes[k][i])
+        #                 self.add_clause(-caux, self.tedge(i, j, k))
+        #                 vars.append(caux)
+        #             self.add_clause(-self.merge[i][j], auxes[i][j], *vars)
 
     def decode(self, model, g, d):
         g = g.copy()

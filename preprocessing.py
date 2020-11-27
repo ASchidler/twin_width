@@ -1,5 +1,5 @@
 def twin_merge(g):
-    nodes = list(g.nodes)
+    nodes = sorted(list(g.nodes))
     for n1 in nodes:
         nb1 = set(g.neighbors(n1))
         for n2 in nodes:

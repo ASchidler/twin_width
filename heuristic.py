@@ -76,22 +76,25 @@ def get_ub2(g):
     reds = {x: set() for x in g.nodes}
 
     while len(g.nodes) > ub:
-        c_min = (maxsize, None)
+        c_min = (maxsize, maxsize, None)
         for n1 in g.nodes:
             for n2 in g.nodes:
                 if n2 > n1:
-                    new_test = len(additional_reds[n1][n2] | reds[n1] | reds[n2])
-                    if new_test < c_min[0]:
-                        c_min = (new_test, (n1, n2))
+                    delta = (set(g.neighbors(n1)) ^ set(g.neighbors(n2))) - {n1, n2}
+                    new_test = len(delta) # len((delta | reds[n1] | reds[n2]) - {n1, n2})
 
-        n1, n2 = c_min[1]
+                    # Test if twin
+                    if len(delta) == 0:
+                        c_min = (0, 0, (n1, n2, delta))
+                        break
+                    elif (new_test, len(set(g.neighbors(n1))) + len(set(g.neighbors(n2))), (n1, n2, delta)) < c_min:
+                        c_min = (new_test, len(delta), (n1, n2, delta))
+
+        n1, n2, delta = c_min[2]
         od.append(n1)
         mg[n1] = n2
 
-        nbs = set(g.neighbors(n1)) ^ set(g.neighbors(n2))
-        nbs.discard(n1)
-        nbs.discard(n2)
-        for cn in nbs:
+        for cn in delta:
             reds[cn].add(n2)
             reds[n2].add(cn)
             if g.has_edge(n2, cn):
@@ -100,8 +103,11 @@ def get_ub2(g):
                 g.add_edge(n2, cn, red=True)
 
         for cn in g.neighbors(n1):
-            if g[n1][cn]['red']:
-                reds[cn].discard(n1)
+            if cn != n2:
+                g[n2][cn]['red'] = True
+                reds[cn].add(n2)
+                reds[n2].add(cn)
+            reds[cn].discard(n1)
 
         g.remove_node(n1)
 
@@ -111,6 +117,8 @@ def get_ub2(g):
             for v in g.neighbors(u):
                 if g[u][v]['red']:
                     cc += 1
+            if cc != len(reds[u]):
+                print(f"mismatch {cc < len(reds[u])}")
             ub = max(ub, cc)
 
     return ub

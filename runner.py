@@ -12,10 +12,16 @@ import preprocessing
 import networkx as nx
 import networkx.algorithms.components.biconnected as bc
 
-path = "/home/asc/Dev/graphs/treewidth_benchmarks/twlib-graphs/all"
+path1 = "/home/asc/Dev/graphs/treewidth_benchmarks/twlib-graphs/all"
+path2 = "/home/asc/Dev/TCW_TD_to_SAT/inputs/famous"
 instance = sys.argv[1]
 
-g = parser.parse(os.path.join(path, instance))[0]
+if os.path.exists(os.path.join(path1, instance)):
+    path = os.path.join(path1, instance)
+else:
+    path = os.path.join(path2, instance)
+
+g = parser.parse(path)[0]
 print(f"{len(g.nodes)} {len(g.edges)}")
 preprocessing.twin_merge(g)
 print(f"{len(g.nodes)} {len(g.edges)}")
@@ -23,6 +29,12 @@ preprocessing.clique_merge(g)
 print(f"{len(g.nodes)} {len(g.edges)}")
 preprocessing.path_merge(g)
 print(f"{len(g.nodes)} {len(g.edges)}")
+
+if len(g.nodes) == 1:
+  print("Done, width: 1")
+  exit(0)
+
+# TODO: Deal with disconnected?
 ub = heuristic.get_ub(g)
 ub2 = heuristic.get_ub2(g)
 print(f"UB {ub} {ub2}")
