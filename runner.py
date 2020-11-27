@@ -5,12 +5,13 @@ import encoding3
 import encoding4
 import encoding5
 import os
-import sat_tools
 import sys
 import heuristic
 import preprocessing
 import networkx as nx
 import networkx.algorithms.components.biconnected as bc
+import pysat.solvers as slv
+import time
 
 path1 = "/home/asc/Dev/graphs/treewidth_benchmarks/twlib-graphs/all"
 path2 = "/home/asc/Dev/TCW_TD_to_SAT/inputs/famous"
@@ -54,15 +55,34 @@ for csg in sg:
                     if g.has_edge(n1, n2):
                         cg.add_edge(n1, n2)
 
+        start = time.time()
+        enc = encoding.TwinWidthEncoding()
+        formula = enc.encode(g, ub)
+        print(f"Created incoding in {time.time() - start}")
+
+        with slv.Cadical() as solver:
+            solver.append_formula(formula)
+            for i in range(ub, -1, -1):
+                start = time.time()
+                vars = enc.get_card_vars(i)
+                if solver.solve(enc.get_card_vars(i)):
+                    cb = i
+                    print(f"Found {i}")
+                    enc.decode(solver.get_model(), g, i)
+                else:
+                    print(f"Failed {i}")
+                    break
+                print(f"Finished cycle in {time.time() - start}")
+
         #st = sat_tools.SatRunner(encoding.TwinWidthEncoding, sat_tools.GlucoseSolver())
         #st = sat_tools.SatRunner(encoding.TwinWidthEncoding, sat_tools.CadicalSolver())
-        st = sat_tools.SatRunner(encoding.TwinWidthEncoding, sat_tools.KissatSolver())
+        #st = sat_tools.SatRunner(encoding.TwinWidthEncoding, sat_tools.KissatSolver())
         #st = sat_tools.SatRunner(encoding.TwinWidthEncoding, sat_tools.MiniSatSolver())
         #st = sat_tools.SatRunner(encoding2.TwinWidthEncoding2, sat_tools.CadicalSolver())
         #st = sat_tools.SatRunner(encoding3.TwinWidthEncoding2, sat_tools.CadicalSolver())
         #st = sat_tools.SatRunner(encoding5.TwinWidthEncoding2, sat_tools.CadicalSolver())
-        r, _ = st.run(cb, cg)
-        cb = min(r, cb)
+        #r, _ = st.run(cb, cg)
+        #cb = min(r, cb)
 
 print(f"Finished, result: {cb}")
 

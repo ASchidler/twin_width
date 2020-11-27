@@ -1,16 +1,18 @@
-import base_encoding
 from networkx import Graph
 from functools import cmp_to_key
+from pysat.formula import CNF, IDPool
+from pysat.card import ITotalizer, CardEnc, EncType
+import tools
 
 
-class TwinWidthEncoding(base_encoding.BaseEncoding):
-    def __init__(self, stream):
-        super().__init__(stream)
-
+class TwinWidthEncoding:
+    def __init__(self):
         self.edge = None
         self.ord = None
         self.merge = None
         self.node_map = None
+        self.pool = IDPool()
+        self.totalizer = None
 
     def remap_graph(self, g):
         self.node_map = {}
@@ -37,9 +39,9 @@ class TwinWidthEncoding(base_encoding.BaseEncoding):
         for i in range(1, len(g.nodes) + 1):
             for j in range(i + 1, len(g.nodes) + 1):
                 for k in range(1, len(g.nodes) + 1):
-                    self.edge[k][i][j] = self.add_var()
-                self.ord[i][j] = self.add_var()
-                self.merge[i][j] = self.add_var()
+                    self.edge[k][i][j] = self.pool.id(f"edge{k}_{i}_{j}")
+                self.ord[i][j] = self.pool.id(f"ord{i}_{j}")
+                self.merge[i][j] = self.pool.id(f"merge{i}_{j}")
 
     def tord(self, i, j):
         if i < j:
@@ -63,6 +65,7 @@ class TwinWidthEncoding(base_encoding.BaseEncoding):
         g = self.remap_graph(g)
         n = len(g.nodes)
         self.init_var(g)
+        formula = CNF()
 
         # Encode relationships
         # Transitivity
@@ -74,17 +77,17 @@ class TwinWidthEncoding(base_encoding.BaseEncoding):
                     if i == k or j == k:
                         continue
 
-                    self.add_clause(-self.tord(i, j), -self.tord(j, k), self.tord(i, k))
+                    formula.append([-self.tord(i, j), -self.tord(j, k), self.tord(i, k)])
         
         # Merge/ord relationship
         for i in range(1, len(g.nodes) + 1):            
             for j in range(i+1, len(g.nodes) + 1):
-                self.add_clause(-self.merge[i][j], self.tord(i, j))
+                formula.append([-self.merge[i][j], self.tord(i, j)])
                 
         # single merge target
         for i in range(1, len(g.nodes) + 1):
-            # self.amo_pair([self.merge[i][j] for j in range(i+1, len(g.nodes)+1)], elo=True)
-            self.amo_commander([self.merge[i][j] for j in range(i + 1, len(g.nodes) + 1)], alo=True)
+            formula.extend(CardEnc.atleast([self.merge[i][j] for j in range(i + 1, len(g.nodes) + 1)], bound=1, vpool=self.pool))
+            formula.extend(tools.amo_commander([self.merge[i][j] for j in range(i + 1, len(g.nodes) + 1)], self.pool))
 
         # Create red arcs
         for i in range(1, len(g.nodes) + 1):
@@ -97,20 +100,32 @@ class TwinWidthEncoding(base_encoding.BaseEncoding):
 
                 for k in diff:
                     # TODO: On dense graphs one could use the complementary graph...
-                    self.add_clause(-self.merge[i][j], -self.tord(i, k), self.tedge(i, j, k))
+                    formula.append([-self.merge[i][j], -self.tord(i, k), self.tedge(i, j, k)])
 
-        self.encode_reds2(g)
+        self.encode_reds2(g, formula)
         #self.perf(n)
 
         # Encode counters
+        self.totalizer = {}
         for i in range(1, len(g.nodes)): # As last one is the root, no counter needed
-            # Map vars to full adjacency matrix
-            vars = [[self.tedge(i, x, y) for x in range(1, len(g.nodes) + 1) if x != y] for y in range(1, len(g.nodes) + 1)]
-            self.encode_cardinality_sat(d, vars)
-        print(f"{self.clauses} / {self.vars}")
-        self.write_header()
+            self.totalizer[i] = {}
+            for x in range(1, len(g.nodes) + 1):
+                vars = [self.tedge(i, x, y) for y in range(1, len(g.nodes)+1) if x != y]
+                self.totalizer[i][x] = ITotalizer(vars, ubound=d, top_id=self.pool.id(f"totalizer{i}_{x}"))
+                formula.extend(self.totalizer[i][x].cnf)
+                self.pool.occupy(self.pool.top-1, self.totalizer[i][x].top_id)
 
-    def encode_reds1(self, g):
+        print(f"{len(formula.clauses)} / {formula.nv}")
+        return formula
+
+    def get_card_vars(self, d):
+        vars = []
+        for v in self.totalizer.values():
+            vars.extend([-x.rhs[d] for x in v.values()])
+
+        return vars
+
+    def encode_reds1(self, g, formula):
         # Maintain red arcs
         for i in range(1, len(g.nodes) + 1):
             for j in range(1, len(g.nodes) + 1):
@@ -125,8 +140,8 @@ class TwinWidthEncoding(base_encoding.BaseEncoding):
                         if i == m or j == m:
                             continue
 
-                        self.add_clause(-self.tord(i, j), -self.tord(j, k), -self.tord(j, m), -self.tedge(i, k, m),
-                                        self.tedge(j, k, m))
+                        formula.append([-self.tord(i, j), -self.tord(j, k), -self.tord(j, m), -self.tedge(i, k, m),
+                                        self.tedge(j, k, m)])
 
         # Transfer red arcs
         for i in range(1, len(g.nodes) + 1):
@@ -141,10 +156,10 @@ class TwinWidthEncoding(base_encoding.BaseEncoding):
                         if m == i or m == k or m == j:
                             continue
 
-                        self.add_clause(-self.merge[i][j], -self.tord(m, i), -self.tord(i, k), -self.tedge(m, i, k),
-                                        self.tedge(i, j, k))
+                        formula.append([-self.merge[i][j], -self.tord(m, i), -self.tord(i, k), -self.tedge(m, i, k),
+                                        self.tedge(i, j, k)])
 
-    def perf(self, n):
+    def perf(self, n, formula):
         for i in range(1, n+1):
             for j in range(1, n + 1):
                 if i == j:
@@ -153,22 +168,22 @@ class TwinWidthEncoding(base_encoding.BaseEncoding):
                     if i == k or j == k:
                         continue
 
-                    self.add_clause(self.tord(i, j), -self.tedge(i, j, k))
+                    formula.append([self.tord(i, j), -self.tedge(i, j, k)])
 
-    def encode_reds2(self, g):
+    def encode_reds2(self, g, formula):
         auxes = {}
         for i in range(1, len(g.nodes) + 1):
             auxes[i] = {}
             for j in range(i+1, len(g.nodes) + 1):
                 if j == i:
                     continue
-                c_aux = self.add_var()
+                c_aux = self.pool.id(f"edge_aux{i}_{j}")
                 auxes[i][j] = c_aux
                 for k in range(1, len(g.nodes) + 1):
                     if k == j or i == k:
                         continue
 
-                    self.add_clause(-self.tord(k, i), -self.tord(k, j), -self.tedge(k, i, j), c_aux)
+                    formula.append([-self.tord(k, i), -self.tord(k, j), -self.tedge(k, i, j), c_aux])
 
         # Maintain red arcs
         for i in range(1, len(g.nodes) + 1):
@@ -184,8 +199,8 @@ class TwinWidthEncoding(base_encoding.BaseEncoding):
                         if i == m or j == m:
                             continue
 
-                        self.add_clause(-self.tord(i, j), -self.tord(j, k), -self.tord(j, m), -self.tedge(i, k, m),
-                                         self.tedge(j, k, m))
+                        formula.append([-self.tord(i, j), -self.tord(j, k), -self.tord(j, m), -self.tedge(i, k, m),
+                                         self.tedge(j, k, m)])
 
         # Transfer red arcs
         for i in range(1, len(g.nodes) + 1):
@@ -199,9 +214,9 @@ class TwinWidthEncoding(base_encoding.BaseEncoding):
 
                     if i < k:
                         # We can make this ternary by doubling the aux vars and implying i < k that way
-                        self.add_clause(-self.merge[i][j], -self.tord(i, k), -auxes[i][k], self.tedge(i, j, k))
+                        formula.append([-self.merge[i][j], -self.tord(i, k), -auxes[i][k], self.tedge(i, j, k)])
                     else:
-                        self.add_clause(-self.merge[i][j], -self.tord(i, k), -auxes[k][i], self.tedge(i, j, k))
+                        formula.append([-self.merge[i][j], -self.tord(i, k), -auxes[k][i], self.tedge(i, j, k)])
 
         # Check if valid
         # n = len(g.nodes)
@@ -222,6 +237,7 @@ class TwinWidthEncoding(base_encoding.BaseEncoding):
 
     def decode(self, model, g, d):
         g = g.copy()
+        model = {abs(x): x > 0 for x in model}
         unmap = {}
         for u, v in self.node_map.items():
             unmap[v] = u
