@@ -118,6 +118,7 @@ class TwinWidthEncoding:
                 self.pool.occupy(self.pool.top-1, self.totalizer[i][x].top_id)
 
         #self.sb_grid(g, n, formula)
+        self.sb_ord(n, formula)
         #print(f"{len(formula.clauses)} / {formula.nv}")
         return formula
 
@@ -132,6 +133,7 @@ class TwinWidthEncoding:
         with solver() as slv:
             slv.append_formula(formula)
             for i in range(start_bound, -1, -1):
+                print(f"{slv.nof_clauses()}/{slv.nof_vars()}")
                 if slv.solve(assumptions=self.get_card_vars(i, solver)):
                     cb = i
                     if verbose:

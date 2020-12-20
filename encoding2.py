@@ -1,8 +1,10 @@
-from networkx import Graph
-from pysat.formula import CNF, IDPool
-from pysat.card import ITotalizer, CardEnc, EncType
-import tools
 import time
+
+from networkx import Graph
+from pysat.card import CardEnc, EncType
+from pysat.formula import CNF, IDPool
+
+import tools
 
 
 class TwinWidthEncoding2:
@@ -53,9 +55,10 @@ class TwinWidthEncoding2:
                         self.red[i][j][k] = self.pool.id(f"red{i}_{j}_{k}")
 
     def encode_order(self, n):
+        self.formula.append([self.ord[n][n]])
+        self.formula.append([self.ord[n-1][n-1]])
         # Assign one node to each time step
-        # TODO: nodes > n -d can be ordered in lex order
-        for i in range(1, n + 1):
+        for i in range(1, n):
             self.formula.extend(tools.amo_commander([self.ord[i][j] for j in range(1, n+1)], self.pool))
             self.formula.extend(CardEnc.atleast([self.ord[i][j] for j in range(1, n+1)], bound=1, vpool=self.pool))
 
@@ -95,6 +98,9 @@ class TwinWidthEncoding2:
                         self.formula.append([-self.ord[i][j], ep[i][k]])
                     else:
                         self.formula.append([-self.ord[i][j], -ep[i][k]])
+
+                nb_vars = [self.ord[i][x] for x in nb]
+                self.formula.append([-ep[i][j], *nb_vars])
 
         for i in range(1, n+1):
             for j in range(1, n+1):
@@ -190,7 +196,7 @@ class TwinWidthEncoding2:
         self.encode_merge(n, d)
         self.encode_red(n, d)
         self.encode_counters(g, d)
-        #self.skip_doublehops(n, d)
+        self.skip_doublehops(n, d)
         #print(f"{len(self.formula.clauses)}")
 
         #self.break_symmetry(n, d)

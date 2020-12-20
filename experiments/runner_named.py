@@ -1,15 +1,10 @@
 import parser
 import encoding
 import encoding2
-import encoding3
-import encoding4
-import encoding5
 import os
 import sys
 import heuristic
 import preprocessing
-import networkx as nx
-import networkx.algorithms.components.biconnected as bc
 import time
 import pysat.solvers as slv
 
@@ -28,7 +23,7 @@ for g, cf in graphs:
     print(f"{cf}: {len(g.nodes)}")
     preprocessing.twin_merge(g)
     if len(g.nodes) == 1:
-        print("Finished, result: 0")
+        print("Finished, result: 0\n\n")
         results[cf] = 0
         continue
 
@@ -40,7 +35,7 @@ for g, cf in graphs:
     enc = encoding.TwinWidthEncoding()
     result = enc.run(g, slv.Cadical, ub)
 
-    print(f"Finished, result: {cb}\n\n")
+    print(f"Finished, result: {result}\n\n")
     results[cf] = result
 
 results = [(k, v) for k, v in results.items()]
