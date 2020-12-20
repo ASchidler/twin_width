@@ -3,8 +3,10 @@ from functools import cmp_to_key
 from pysat.formula import CNF, IDPool
 from pysat.card import ITotalizer, CardEnc, EncType
 import tools
+import subprocess
+import time
 
-
+# TODO: Symmetry breaking: If two consecutive contractions have to node with red edges in common -> lex order
 class TwinWidthEncoding:
     def __init__(self):
         self.edge = None
@@ -115,17 +117,45 @@ class TwinWidthEncoding:
                 formula.extend(self.totalizer[i][x].cnf)
                 self.pool.occupy(self.pool.top-1, self.totalizer[i][x].top_id)
 
-        print(f"{len(formula.clauses)} / {formula.nv}")
+        #self.sb_grid(g, n, formula)
+        #print(f"{len(formula.clauses)} / {formula.nv}")
         return formula
 
-    def get_card_vars(self, d):
+    def run(self, g, solver, start_bound, verbose=True, check=True):
+        start = time.time()
+        formula = self.encode(g, start_bound)
+        cb = start_bound
+
+        if verbose:
+            print(f"Created encoding in {time.time() - start}")
+
+        with solver() as slv:
+            slv.append_formula(formula)
+            for i in range(start_bound, -1, -1):
+                if slv.solve(assumptions=self.get_card_vars(i, solver)):
+                    cb = i
+                    if verbose:
+                        print(f"Found {i}")
+                    if check:
+                        self.decode(slv.get_model(), g, i)
+                else:
+                    if verbose:
+                        print(f"Failed {i}")
+                    break
+
+                if verbose:
+                    print(f"Finished cycle in {time.time() - start}")
+
+        return cb
+
+    def get_card_vars(self, d, solver):
         vars = []
         for v in self.totalizer.values():
             vars.extend([-x.rhs[d] for x in v.values()])
 
         return vars
 
-    def encode_reds1(self, g, formula):
+    def _encode_reds1(self, g, formula):
         # Maintain red arcs
         for i in range(1, len(g.nodes) + 1):
             for j in range(1, len(g.nodes) + 1):
@@ -177,7 +207,7 @@ class TwinWidthEncoding:
             for j in range(i+1, len(g.nodes) + 1):
                 if j == i:
                     continue
-                c_aux = self.pool.id(f"edge_aux{i}_{j}")
+                c_aux = self.pool.id(f"a_red{i}_{j}")
                 auxes[i][j] = c_aux
                 for k in range(1, len(g.nodes) + 1):
                     if k == j or i == k:
@@ -218,22 +248,61 @@ class TwinWidthEncoding:
                     else:
                         formula.append([-self.merge[i][j], -self.tord(i, k), -auxes[k][i], self.tedge(i, j, k)])
 
-        # Check if valid
-        # n = len(g.nodes)
-        # for i in range(1, n+1):
-        #     inb = set(g.neighbors(i))
-        #     for j in range(i+1, n+1):
-        #         # Not onehop reachable
-        #         if g.has_edge(i, j) or len(inb & set(g.neighbors(j))) == 0:
-        #             vars = []
-        #             for k in range(1, n+1):
-        #                 if i == k or j == k:
-        #                     continue
-        #                 caux = self.add_var()
-        #                 self.add_clause(-caux, auxes[i][k] if i < k else auxes[k][i])
-        #                 self.add_clause(-caux, self.tedge(i, j, k))
-        #                 vars.append(caux)
-        #             self.add_clause(-self.merge[i][j], auxes[i][j], *vars)
+    def sb(self, g, formula):
+        n = len(g.nodes)
+        has_edge = {x: None for x in range(1, n+1)}
+        has_tedge = {x: None for x in range(1, n + 1)}
+
+        for n1 in g.nodes:
+            v1 = self.node_map[n1]
+            tedges = set()
+            has_edge[v1] = {x: self.pool.id(f"neighbors{v1}_{x}") for x in range(1, n+1) if x > v1}
+            has_tedge[v1] = {x: self.pool.id(f"neighbors{v1}_{x}") for x in range(1, n+1) if x > v1}
+
+            for n2 in g.nodes:
+                v2 = self.node_map[n2]
+
+                if n2 != n1 and n2 in g[n1]:
+                    formula.append([has_edge[v1][v2]])
+                    formula.append([has_tedge[v1][v2]])
+                    tedges.add(v2)
+                else:
+                    other_var = self.pool.id(f"a_red{v1}_{v2}")
+                    formula.append([-has_edge[v1][v2], other_var])
+                    if len(set(g.neighbors(n1) ^ set(g.neighbors(n2)))) > 0:
+                        formula.append([has_tedge[v1][v2]])
+                        tedges.add(v2)
+
+            for n2 in range(1, n+1):
+                if n2 in tedges:
+                    continue
+
+                for k in range(1, n+1):
+                    aux = self.pool.id(f"aux_tedge{n1}_{n2}_{k}")
+                    formula.append([-aux, self.tord(k, n1), has_tedge()])
+
+
+            for n2 in range(1, n+1):
+                for n3 in range(1, n+1):
+                    self.pool.id(f"")
+        for n1 in range(1, n+1):
+            for n2 in range(n1+1, n+1):
+                clause = [-self.merge[n1][n2], has_edge[n1][n2]]
+
+    def sb_grid(self, g, n, formula):
+        smallest = {x: self.pool.id(f"smallest{x}") for x in range(1, n+1)}
+        formula.extend(CardEnc.atmost(smallest.values()))
+
+        for i in range(1, n+1):
+            for j in range(i+1, n+1):
+                formula.append([-self.tord(i, j), -smallest[j]])
+                formula.append([-self.tord(j, i), -smallest[i]])
+
+        import math
+        width = math.sqrt(n) // 2
+
+        quadrant = [z for (x, y), z in self.node_map.items() if y <= width and z <= width]
+        formula.append([smallest[i] for i in quadrant])
 
     def decode(self, model, g, d):
         g = g.copy()
@@ -266,9 +335,22 @@ class TwinWidthEncoding:
             g[u][v]['red'] = False
 
         c_max = 0
+        cnt = 0
         for n in od[:-1]:
             t = unmap[mg[n]]
             n = unmap[n]
+            # graph_export, line_export = tools.dot_export(g, t, n)
+            # with open(f"progress_{cnt}.dot", "w") as f:
+            #     f.write(graph_export)
+            # with open(f"progress_{cnt}.png", "w") as f:
+            #     subprocess.run(["dot", "-Kfdp", "-Tpng", f"progress_{cnt}.dot"], stdout=f)
+
+            # with open(f"line_{cnt}.dot", "w") as f:
+            #     f.write(line_export)
+            # with open(f"line_{cnt}.png", "w") as f:
+            #     subprocess.run(["dot", "-Tpng", f"line_{cnt}.dot"], stdout=f)
+
+
             tn = set(g.neighbors(t))
             tn.discard(n)
             nn = set(g.neighbors(n))
@@ -293,5 +375,6 @@ class TwinWidthEncoding:
                     if g[u][v]['red']:
                         cc += 1
                 c_max = max(c_max, cc)
-        print(f"Done {c_max}/{d}")
+            cnt += 1
+        #print(f"Done {c_max}/{d}")
         return c_max

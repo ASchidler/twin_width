@@ -5,12 +5,13 @@ import encoding3
 import encoding4
 import encoding5
 import os
-import sat_tools
 import sys
 import heuristic
 import preprocessing
 import networkx as nx
 import networkx.algorithms.components.biconnected as bc
+import time
+import pysat.solvers as slv
 
 path = "/home/asc/Dev/TCW_TD_to_SAT/inputs/famous"
 
@@ -51,18 +52,25 @@ for cf in os.listdir(path):
                             if g.has_edge(n1, n2):
                                 cg.add_edge(n1, n2)
 
-                #st = sat_tools.SatRunner(encoding.TwinWidthEncoding, sat_tools.GlucoseSolver())
-                #st = sat_tools.SatRunner(encoding.TwinWidthEncoding, sat_tools.CadicalSolver())
-                st = sat_tools.SatRunner(encoding.TwinWidthEncoding, sat_tools.KissatSolver())
-                #st = sat_tools.SatRunner(encoding.TwinWidthEncoding, sat_tools.MiniSatSolver())
-                #st = sat_tools.SatRunner(encoding2.TwinWidthEncoding2, sat_tools.CadicalSolver())
-                #st = sat_tools.SatRunner(encoding3.TwinWidthEncoding2, sat_tools.CadicalSolver())
-                #st = sat_tools.SatRunner(encoding5.TwinWidthEncoding2, sat_tools.CadicalSolver())
-                r, _ = st.run(cb, cg, timeout=600)
-                if r is not None:
-                    cb = min(r, cb)
-                else:
-                    print("Failed")
+                start = time.time()
+                enc = encoding.TwinWidthEncoding()
+                # enc = encoding2.TwinWidthEncoding2(g)
+                formula = enc.encode(g, ub)
+                print(f"Created encoding in {time.time() - start}")
+
+                with slv.Cadical() as solver:
+                    solver.append_formula(formula)
+                    for i in range(ub, -1, -1):
+                        start = time.time()
+
+                        if solver.solve(enc.get_card_vars(i, solver)):
+                            cb = i
+                            print(f"Found {i}")
+                            enc.decode(solver.get_model(), g, i)
+                        else:
+                            print(f"Failed {i}")
+                            print(f"Finished cycle in {time.time() - start}")
+                            break
 
         print(f"Finished, result: {cb}\n\n")
 

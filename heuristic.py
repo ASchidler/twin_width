@@ -81,7 +81,7 @@ def get_ub2(g):
             for n2 in g.nodes:
                 if n2 > n1:
                     delta = (set(g.neighbors(n1)) ^ set(g.neighbors(n2))) - {n1, n2}
-                    new_test = len(delta) # len((delta | reds[n1] | reds[n2]) - {n1, n2})
+                    new_test = len(delta)  # len((delta | reds[n1] | reds[n2]) - {n1, n2})
 
                     # Test if twin
                     if len(delta) == 0:

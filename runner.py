@@ -12,6 +12,7 @@ import networkx as nx
 import networkx.algorithms.components.biconnected as bc
 import pysat.solvers as slv
 import time
+from networkx.generators.lattice import grid_2d_graph
 
 path1 = "/home/asc/Dev/graphs/treewidth_benchmarks/twlib-graphs/all"
 path2 = "/home/asc/Dev/TCW_TD_to_SAT/inputs/famous"
@@ -23,6 +24,7 @@ else:
     path = os.path.join(path2, instance)
 
 g = parser.parse(path)[0]
+#g = grid_2d_graph(7, 7)
 print(f"{len(g.nodes)} {len(g.edges)}")
 preprocessing.twin_merge(g)
 print(f"{len(g.nodes)} {len(g.edges)}")
@@ -32,8 +34,8 @@ preprocessing.path_merge(g)
 print(f"{len(g.nodes)} {len(g.edges)}")
 
 if len(g.nodes) == 1:
-  print("Done, width: 1")
-  exit(0)
+    print("Done, width: 1")
+    exit(0)
 
 # TODO: Deal with disconnected?
 ub = heuristic.get_ub(g)
@@ -57,32 +59,8 @@ for csg in sg:
 
         start = time.time()
         enc = encoding.TwinWidthEncoding()
-        formula = enc.encode(g, ub)
-        print(f"Created incoding in {time.time() - start}")
-
-        with slv.Cadical() as solver:
-            solver.append_formula(formula)
-            for i in range(ub, -1, -1):
-                start = time.time()
-                vars = enc.get_card_vars(i)
-                if solver.solve(enc.get_card_vars(i)):
-                    cb = i
-                    print(f"Found {i}")
-                    enc.decode(solver.get_model(), g, i)
-                else:
-                    print(f"Failed {i}")
-                    break
-                print(f"Finished cycle in {time.time() - start}")
-
-        #st = sat_tools.SatRunner(encoding.TwinWidthEncoding, sat_tools.GlucoseSolver())
-        #st = sat_tools.SatRunner(encoding.TwinWidthEncoding, sat_tools.CadicalSolver())
-        #st = sat_tools.SatRunner(encoding.TwinWidthEncoding, sat_tools.KissatSolver())
-        #st = sat_tools.SatRunner(encoding.TwinWidthEncoding, sat_tools.MiniSatSolver())
-        #st = sat_tools.SatRunner(encoding2.TwinWidthEncoding2, sat_tools.CadicalSolver())
-        #st = sat_tools.SatRunner(encoding3.TwinWidthEncoding2, sat_tools.CadicalSolver())
-        #st = sat_tools.SatRunner(encoding5.TwinWidthEncoding2, sat_tools.CadicalSolver())
-        #r, _ = st.run(cb, cg)
-        #cb = min(r, cb)
+        #enc = encoding2.TwinWidthEncoding2(g)
+        cb = enc.run(g, slv.Cadical, ub)
 
 print(f"Finished, result: {cb}")
 
