@@ -1,6 +1,7 @@
 def twin_merge(g):
-    changed = False
+    changed = True
     while changed:
+        changed = False
         nodes = sorted(list(g.nodes))
         for n1 in nodes:
             nb1 = set(g.neighbors(n1))

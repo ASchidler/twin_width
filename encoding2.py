@@ -2,7 +2,7 @@ from networkx import Graph
 from pysat.formula import CNF, IDPool
 from pysat.card import ITotalizer, CardEnc
 import tools
-
+import time
 
 class TwinWidthEncoding2:
     def __init__(self, g):
@@ -232,6 +232,33 @@ class TwinWidthEncoding2:
             vars.extend([-x.rhs[d] for x in (y for y in v.values() if len(y.lits) > d)])
 
         return vars
+
+    def run(self, g, solver, start_bound, verbose=True, check=True):
+        start = time.time()
+        formula = self.encode(g, start_bound)
+        cb = start_bound
+
+        if verbose:
+            print(f"Created encoding in {time.time() - start}")
+
+        with solver() as slv:
+            slv.append_formula(formula)
+            for i in range(start_bound, -1, -1):
+                if slv.solve(assumptions=self.get_card_vars(i, solver)):
+                    cb = i
+                    if verbose:
+                        print(f"Found {i}")
+                    if check:
+                        self.decode(slv.get_model(), g, i)
+                else:
+                    if verbose:
+                        print(f"Failed {i}")
+                    break
+
+                if verbose:
+                    print(f"Finished cycle in {time.time() - start}")
+
+        return cb
 
     def decode(self, model, g, d):
         g = g.copy()

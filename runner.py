@@ -58,8 +58,8 @@ for csg in sg:
                         cg.add_edge(n1, n2)
 
         start = time.time()
-        enc = encoding.TwinWidthEncoding()
-        #enc = encoding2.TwinWidthEncoding2(g)
+        #enc = encoding.TwinWidthEncoding()
+        enc = encoding2.TwinWidthEncoding2(g)
         cb = enc.run(g, slv.Cadical, ub)
 
 print(f"Finished, result: {cb}")
