@@ -248,46 +248,11 @@ class TwinWidthEncoding:
                     else:
                         formula.append([-self.merge[i][j], -self.tord(i, k), -auxes[k][i], self.tedge(i, j, k)])
 
-    def sb(self, g, formula):
-        n = len(g.nodes)
-        has_edge = {x: None for x in range(1, n+1)}
-        has_tedge = {x: None for x in range(1, n + 1)}
-
-        for n1 in g.nodes:
-            v1 = self.node_map[n1]
-            tedges = set()
-            has_edge[v1] = {x: self.pool.id(f"neighbors{v1}_{x}") for x in range(1, n+1) if x > v1}
-            has_tedge[v1] = {x: self.pool.id(f"neighbors{v1}_{x}") for x in range(1, n+1) if x > v1}
-
-            for n2 in g.nodes:
-                v2 = self.node_map[n2]
-
-                if n2 != n1 and n2 in g[n1]:
-                    formula.append([has_edge[v1][v2]])
-                    formula.append([has_tedge[v1][v2]])
-                    tedges.add(v2)
-                else:
-                    other_var = self.pool.id(f"a_red{v1}_{v2}")
-                    formula.append([-has_edge[v1][v2], other_var])
-                    if len(set(g.neighbors(n1) ^ set(g.neighbors(n2)))) > 0:
-                        formula.append([has_tedge[v1][v2]])
-                        tedges.add(v2)
-
-            for n2 in range(1, n+1):
-                if n2 in tedges:
-                    continue
-
-                for k in range(1, n+1):
-                    aux = self.pool.id(f"aux_tedge{n1}_{n2}_{k}")
-                    formula.append([-aux, self.tord(k, n1), has_tedge()])
-
-
-            for n2 in range(1, n+1):
-                for n3 in range(1, n+1):
-                    self.pool.id(f"")
-        for n1 in range(1, n+1):
-            for n2 in range(n1+1, n+1):
-                clause = [-self.merge[n1][n2], has_edge[n1][n2]]
+    def sb_ord(self, n, formula):
+        for i in range(1, n):
+            formula.append([self.ord[i][n]])
+            if i < n-1:
+                formula.append([self.ord[i][n-1]])
 
     def sb_grid(self, g, n, formula):
         smallest = {x: self.pool.id(f"smallest{x}") for x in range(1, n+1)}

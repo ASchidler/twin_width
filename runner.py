@@ -1,9 +1,6 @@
 import parser
 import encoding
 import encoding2
-import encoding3
-import encoding4
-import encoding5
 import os
 import sys
 import heuristic
@@ -58,7 +55,7 @@ for csg in sg:
                         cg.add_edge(n1, n2)
 
         start = time.time()
-        #enc = encoding.TwinWidthEncoding()
+        enc = encoding.TwinWidthEncoding()
         enc = encoding2.TwinWidthEncoding2(g)
         cb = enc.run(g, slv.Cadical, ub)
 

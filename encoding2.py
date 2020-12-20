@@ -1,19 +1,21 @@
 from networkx import Graph
 from pysat.formula import CNF, IDPool
-from pysat.card import ITotalizer, CardEnc
+from pysat.card import ITotalizer, CardEnc, EncType
 import tools
 import time
 
+
 class TwinWidthEncoding2:
-    def __init__(self, g):
+    def __init__(self, g, card_enc=EncType.totalizer):
         self.edge = None
         self.ord = None
         self.merge = None
         self.node_map = None
-        self.pool = IDPool()
-        self.formula = CNF()
+        self.pool = None
+        self.formula = None
         self.totalizer = None
         self.g = g
+        self.card_enc = card_enc
 
     def remap_graph(self, g):
         self.node_map = {}
@@ -52,6 +54,7 @@ class TwinWidthEncoding2:
 
     def encode_order(self, n):
         # Assign one node to each time step
+        # TODO: nodes > n -d can be ordered in lex order
         for i in range(1, n + 1):
             self.formula.extend(tools.amo_commander([self.ord[i][j] for j in range(1, n+1)], self.pool))
             self.formula.extend(CardEnc.atleast([self.ord[i][j] for j in range(1, n+1)], bound=1, vpool=self.pool))
@@ -171,29 +174,22 @@ class TwinWidthEncoding2:
             else:
                 return self.red[u][y][x]
 
-        self.totalizer = {}
         for i in range(1, len(g.nodes)-d+1):  # As last one is the root, no counter needed
-            self.totalizer[i] = {}
             for x in range(i+1, len(g.nodes) + 1):
                 vars = [tred(i, x, y) for y in range(i+1, len(g.nodes)+1) if x != y]
-                self.totalizer[i][x] = ITotalizer(vars, ubound=d, top_id=self.pool.id(f"totalizer{i}_{x}"))
-                self.pool.occupy(self.pool.top, self.totalizer[i][x].top_id)
-                self.formula.extend(self.totalizer[i][x].cnf)
+                self.formula.extend(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
 
     def encode(self, g, d):
         g = self.remap_graph(g)
         n = len(g.nodes)
+        self.pool = IDPool()
+        self.formula = CNF()
         self.init_var(g, d)
         self.encode_edges2(g)
-        print(f"{len(self.formula.clauses)}")
         self.encode_order(n)
-        print(f"{len(self.formula.clauses)}")
         self.encode_merge(n, d)
-        print(f"{len(self.formula.clauses)}")
         self.encode_red(n, d)
-        print(f"{len(self.formula.clauses)}")
         self.encode_counters(g, d)
-        print(f"{len(self.formula.clauses)}")
         #self.skip_doublehops(n, d)
         #print(f"{len(self.formula.clauses)}")
 
@@ -202,49 +198,19 @@ class TwinWidthEncoding2:
         print(f"{len(self.formula.clauses)} / {self.formula.nv}")
         return self.formula
 
-    def get_card_vars(self, d, solver):
-        n = len(self.g.nodes)
-
-        def tred(u, x, y):
-            if x < y:
-                return self.red[u][x][y]
-            else:
-                return self.red[u][y][x]
-
-        for i in range(1, n - d + 1):
-            if len(self.merge[i]) == 0:
-                for j in range(i + 1, n + 1):
-                    self.merge[i][j] = self.pool.id(f"merge{i}_{j}")
-                solver.append_formula(
-                    tools.amo_commander([self.merge[i][j] for j in range(i + 1, n + 1)], vpool=self.pool))
-                solver.append_formula(
-                    CardEnc.atleast([self.merge[i][j] for j in range(i + 1, n + 1)], vpool=self.pool, bound=1))
-
-                self.totalizer[i] = {}
-                for x in range(i+1, n + 1):
-                    vars = [tred(i, x, y) for y in range(i+1, n+1) if x != y]
-                    self.totalizer[i][x] = ITotalizer(vars, ubound=d, top_id=self.pool.id(f"totalizer{i}_{x}"))
-                    self.pool.occupy(self.pool.top, self.totalizer[i][x].top_id)
-                    self.formula.extend(self.totalizer[i][x].cnf)
-
-        vars = []
-        for v in self.totalizer.values():
-            vars.extend([-x.rhs[d] for x in (y for y in v.values() if len(y.lits) > d)])
-
-        return vars
-
     def run(self, g, solver, start_bound, verbose=True, check=True):
         start = time.time()
-        formula = self.encode(g, start_bound)
         cb = start_bound
 
         if verbose:
             print(f"Created encoding in {time.time() - start}")
 
-        with solver() as slv:
-            slv.append_formula(formula)
-            for i in range(start_bound, -1, -1):
-                if slv.solve(assumptions=self.get_card_vars(i, solver)):
+        for i in range(start_bound, -1, -1):
+            with solver() as slv:
+                formula = self.encode(g, i)
+                slv.append_formula(formula)
+
+                if slv.solve():
                     cb = i
                     if verbose:
                         print(f"Found {i}")
