@@ -7,17 +7,23 @@ import heuristic
 import experiments.nauty_limits as nl
 import subprocess
 import sys
-from multiprocessing.pool import ThreadPool
 from collections import defaultdict
 import threading
+import tools
+import time
+from multiprocessing import Pool, Value, Array
 
 solver = Cadical
-pool_size = 4
-lock1 = threading.Lock()
-lock2 = threading.Lock()
+pool_size = 20
+prime = Value("i")
+total = Value("i")
+counts = None
 
 if len(sys.argv) > 2:
     start_at = int(sys.argv[1])
+
+queue = []
+done = False
 
 
 def run_nauty(bnd):
@@ -30,15 +36,12 @@ def run_nauty(bnd):
         raise subprocess.CalledProcessError(return_code, ["bin/geng", "-c", bnd])
 
 
-def add_result(g6, bnd):
-    lock1.acquire()
-    nl.nauty_total[bnd] += 1
-    lock1.release()
+def add_runner(c_str):
+    total.value += 1
 
-    g = networkx.from_graph6_bytes(bytes(g6.strip(), encoding="ascii"))
-    before = len(g.nodes)
-    preprocessing.twin_merge(g)
-    if before > len(g.nodes):
+    g = networkx.from_graph6_bytes(bytes(c_str.strip(), encoding="ascii"))
+    modules = tools.find_modules(g)
+    if len(modules) < len(g.nodes):
         return
 
     enc = encoding.TwinWidthEncoding()
@@ -48,24 +51,33 @@ def add_result(g6, bnd):
         ub = min(heuristic.get_ub(g), heuristic.get_ub2(g))
         result = enc.run(g, Cadical, ub, verbose=False, check=False)
 
-    # Since we parallelize only calls with the same bound and any single operation is threadsafe, this is ok
-    if result not in nl.nauty_smallest:
-        nl.nauty_smallest[result] = f"{g6.strip()}"
-
-    lock2.acquire()
-    nl.nauty_prime[bnd] += 1
-    nl.nauty_counts[bnd][result] += 1
-    lock2.release()
+    prime.value += 1
+    counts[result] += 1
 
 
 for i in range(nl.finished+1, 33):
-    pool = ThreadPool(processes=4)
-    nl.nauty_total[i] = 0
-    nl.nauty_prime[i] = 0
-    nl.nauty_counts[i] = defaultdict(lambda: 0)
-    pool.map(lambda x: add_result(x, i), run_nauty(i))
-    pool.close()
-    pool.join()
+    counts = Array("i", [0 for _ in range(0, i)])
+    prime.value = 0
+    total.value = 0
+
+    # TODO: Smallest?
+    with Pool(processes=pool_size) as pool:
+        pool.map(add_runner, run_nauty(i))
+        done = False
+
+        last = 0
+        while last < total.value:
+            time.sleep(5)
+            last = total.value
+            print(f"{last} entries done")
+
+        pool.close()
+        pool.join()
+        nl.nauty_total[i] = total.value
+        nl.nauty_prime[i] = prime.value
+        nl.nauty_counts[i] = {}
+        for ci in range(0, i):
+            nl.nauty_counts[i][ci] = counts[ci]
 
     print(f"Finished {i}")
 

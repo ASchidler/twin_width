@@ -105,7 +105,7 @@ class TwinWidthEncoding:
                     formula.append([-self.merge[i][j], -self.tord(i, k), self.tedge(i, j, k)])
 
         self.encode_reds2(g, formula)
-        #self.perf(n)
+        #self.perf(n, formula)
 
         # Encode counters
         self.totalizer = {}
@@ -119,6 +119,7 @@ class TwinWidthEncoding:
 
         #self.sb_grid(g, n, formula)
         self.sb_ord(n, formula)
+        #self.sb_sth(g, formula, d)
         #print(f"{len(formula.clauses)} / {formula.nv}")
         return formula
 
@@ -133,8 +134,9 @@ class TwinWidthEncoding:
         with solver() as slv:
             slv.append_formula(formula)
             for i in range(start_bound, -1, -1):
-                print(f"{slv.nof_clauses()}/{slv.nof_vars()}")
-                if slv.solve(assumptions=self.get_card_vars(i, solver)):
+                if verbose:
+                    print(f"{slv.nof_clauses()}/{slv.nof_vars()}")
+                if slv.solve(assumptions=self.get_card_vars(i)):
                     cb = i
                     if verbose:
                         print(f"Found {i}")
@@ -143,64 +145,23 @@ class TwinWidthEncoding:
                 else:
                     if verbose:
                         print(f"Failed {i}")
+                        print(f"Finished cycle in {time.time() - start}")
                     break
 
                 if verbose:
                     print(f"Finished cycle in {time.time() - start}")
 
+        for v in self.totalizer.values():
+            for t in v.values():
+                t.delete()
         return cb
 
-    def get_card_vars(self, d, solver):
+    def get_card_vars(self, d):
         vars = []
         for v in self.totalizer.values():
             vars.extend([-x.rhs[d] for x in v.values()])
 
         return vars
-
-    def _encode_reds1(self, g, formula):
-        # Maintain red arcs
-        for i in range(1, len(g.nodes) + 1):
-            for j in range(1, len(g.nodes) + 1):
-                if i == j:
-                    continue
-
-                for k in range(1, len(g.nodes) + 1):
-                    if j == k or i == k:
-                        continue
-
-                    for m in range(k + 1, len(g.nodes) + 1):
-                        if i == m or j == m:
-                            continue
-
-                        formula.append([-self.tord(i, j), -self.tord(j, k), -self.tord(j, m), -self.tedge(i, k, m),
-                                        self.tedge(j, k, m)])
-
-        # Transfer red arcs
-        for i in range(1, len(g.nodes) + 1):
-            for j in range(i + 1, len(g.nodes) + 1):
-                if i == j:
-                    continue
-
-                for k in range(1, len(g.nodes) + 1):
-                    if k == i or k == j:
-                        continue
-                    for m in range(1, len(g.nodes) + 1):
-                        if m == i or m == k or m == j:
-                            continue
-
-                        formula.append([-self.merge[i][j], -self.tord(m, i), -self.tord(i, k), -self.tedge(m, i, k),
-                                        self.tedge(i, j, k)])
-
-    def perf(self, n, formula):
-        for i in range(1, n+1):
-            for j in range(1, n + 1):
-                if i == j:
-                    continue
-                for k in range(1, n+1):
-                    if i == k or j == k:
-                        continue
-
-                    formula.append([self.tord(i, j), -self.tedge(i, j, k)])
 
     def encode_reds2(self, g, formula):
         auxes = {}
@@ -345,3 +306,18 @@ class TwinWidthEncoding:
             cnt += 1
         #print(f"Done {c_max}/{d}")
         return c_max
+
+    def sb_sth(self, g, formula, ub):
+        n = len(g.nodes)
+
+        for i in range(1, len(g.nodes) + 1):
+            inb = set(g.neighbors(i))
+            for j in range(i+1, len(g.nodes) + 1):
+                jnb = set(g.neighbors(j))
+                jnb.discard(i)
+                diff = jnb ^ inb  # Symmetric difference
+                diff.discard(j)
+
+                if len(diff) > ub:
+                    lits = [self.tord(x, i) for x in diff]
+                    formula.append([-self.merge[i][j], *lits])
