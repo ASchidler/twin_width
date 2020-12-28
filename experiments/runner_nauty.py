@@ -11,19 +11,19 @@ from collections import defaultdict
 import threading
 import tools
 import time
-from multiprocessing import Pool, Value, Array
+from multiprocessing import Pool, Value, Array, Queue
 
 solver = Cadical
-pool_size = 20
+pool_size = 4
+c_smallest = Value("i")
+c_smallest.value = -1
 prime = Value("i")
 total = Value("i")
 counts = None
+queue = Queue()
 
 if len(sys.argv) > 2:
     start_at = int(sys.argv[1])
-
-queue = []
-done = False
 
 
 def run_nauty(bnd):
@@ -53,9 +53,16 @@ def add_runner(c_str):
 
     prime.value += 1
     counts[result] += 1
+    if result > c_smallest.value:
+        queue.put((result, c_str))
 
 
-for i in range(nl.finished+1, 33):
+for v in nl.nauty_counts.values():
+    for k2, v2 in v.items():
+        if v2 > 0:
+            c_smallest.value = max(c_smallest.value, k2)
+
+for i in range(nl.finished+1, 10):
     counts = Array("i", [0 for _ in range(0, i)])
     prime.value = 0
     total.value = 0
@@ -78,6 +85,12 @@ for i in range(nl.finished+1, 33):
         nl.nauty_counts[i] = {}
         for ci in range(0, i):
             nl.nauty_counts[i][ci] = counts[ci]
+        while not queue.empty():
+            c_result, c_str = queue.get()
+            if c_result not in nl.nauty_smallest:
+                nl.nauty_smallest[c_result] = []
+            nl.nauty_smallest[c_result].append(c_str)
+            c_smallest.value = max(c_smallest.value, c_result)
 
     print(f"Finished {i}")
 
@@ -88,6 +101,15 @@ for i in range(nl.finished+1, 33):
                     nf.write(f"{k}: " + "{")
                     print_dict(v, sep_lines=False)
                     nf.write("}, " + (os.linesep if sep_lines else " "))
+                elif isinstance(v, list):
+                    nf.write(f"{k}: [")
+                    for entry in v:
+                        if isinstance(entry, str):
+                            nf.write(f"'{entry.strip()}',")
+                        else:
+                            nf.write(f"{entry},")
+                    nf.seek(nf.tell() - 1)
+                    nf.write("],"+os.linesep)
                 else:
                     if isinstance(v, str):
                         nf.write(f"{k}: '{v}'," + (os.linesep if sep_lines else " "))

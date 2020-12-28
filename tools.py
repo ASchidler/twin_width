@@ -52,7 +52,7 @@ def dot_export(g, u, v):
                    f"color={cl}, fillcolor={cl}{posstr}];{os.linesep}"
 
     for x, y in g.edges:
-        cl = 'red' if g[x][y]['red'] else 'black'
+        cl = 'red' if 'red' in g[x][y] and g[x][y]['red'] else 'black'
         output1 += f"n{cln(x)} -- n{cln(y)} [color={cl}];{os.linesep}"
 
     # Draw the linegraph
@@ -61,7 +61,7 @@ def dot_export(g, u, v):
     for x, y in g.edges:
         x, y = min(x, y), max(x, y)
         color = 'green' if x == u and v == y else 'white'
-        fillcolor = 'red' if g[x][y]['red'] else 'black'
+        fillcolor = 'red' if 'red' in g[x][y] and g[x][y]['red'] else 'black'
         output2 += f"n{cln(x)}_{cln(y)} [" \
         f"shape=box, fontsize=11,style=filled,fontcolor={color}," \
         f"color={color}, fillcolor={fillcolor}];{os.linesep}"
