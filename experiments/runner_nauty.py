@@ -15,12 +15,6 @@ from multiprocessing import Pool, Value, Array, Queue
 
 solver = Cadical
 pool_size = 4
-c_smallest = Value("i")
-c_smallest.value = -1
-prime = Value("i")
-total = Value("i")
-counts = None
-queue = Queue()
 
 if len(sys.argv) > 2:
     start_at = int(sys.argv[1])
@@ -36,13 +30,11 @@ def run_nauty(bnd):
         raise subprocess.CalledProcessError(return_code, ["bin/geng", "-c", bnd])
 
 
-def add_runner(c_str):
-    total.value += 1
-
-    g = networkx.from_graph6_bytes(bytes(c_str.strip(), encoding="ascii"))
+def add_runner(g_str):
+    g = networkx.from_graph6_bytes(bytes(g_str.strip(), encoding="ascii"))
     modules = tools.find_modules(g)
     if len(modules) < len(g.nodes):
-        return
+        return None, None
 
     enc = encoding.TwinWidthEncoding()
     if len(g.nodes) <= 2:
@@ -51,46 +43,43 @@ def add_runner(c_str):
         ub = min(heuristic.get_ub(g), heuristic.get_ub2(g))
         result = enc.run(g, Cadical, ub, verbose=False, check=False)
 
-    prime.value += 1
-    counts[result] += 1
-    if result > c_smallest.value:
-        queue.put((result, c_str))
+    return result, g_str
 
 
+c_smallest = -1
 for v in nl.nauty_counts.values():
     for k2, v2 in v.items():
         if v2 > 0:
-            c_smallest.value = max(c_smallest.value, k2)
+            c_smallest = max(c_smallest, k2)
 
 for i in range(nl.finished+1, 10):
-    counts = Array("i", [0 for _ in range(0, i)])
-    prime.value = 0
-    total.value = 0
+    totals = 0
+    prime = 0
+    counts = defaultdict(lambda: 0)
 
-    # TODO: Smallest?
     with Pool(processes=pool_size) as pool:
-        pool.map(add_runner, run_nauty(i))
-        done = False
+        new_smallest = c_smallest
 
-        last = 0
-        while last < total.value:
-            time.sleep(5)
-            last = total.value
-            print(f"{last} entries done")
+        for p_result, p_str in pool.imap_unordered(add_runner, run_nauty(i), chunksize=pool_size):
+            totals += 1
+            if p_result is not None:
+                prime += 1
+                counts[p_result] += 1
+                if p_result > c_smallest:
+                    if p_result not in nl.nauty_smallest:
+                        nl.nauty_smallest[p_result] = []
+                    nl.nauty_smallest[p_result].append(p_str)
+                    new_smallest = max(new_smallest, p_result)
 
         pool.close()
         pool.join()
-        nl.nauty_total[i] = total.value
-        nl.nauty_prime[i] = prime.value
-        nl.nauty_counts[i] = {}
-        for ci in range(0, i):
-            nl.nauty_counts[i][ci] = counts[ci]
-        while not queue.empty():
-            c_result, c_str = queue.get()
-            if c_result not in nl.nauty_smallest:
-                nl.nauty_smallest[c_result] = []
-            nl.nauty_smallest[c_result].append(c_str)
-            c_smallest.value = max(c_smallest.value, c_result)
+
+    c_smallest = new_smallest
+    nl.nauty_total[i] = totals
+    nl.nauty_prime[i] = prime
+    nl.nauty_counts[i] = {}
+    for ci in range(0, i):
+        nl.nauty_counts[i][ci] = counts[ci]
 
     print(f"Finished {i}")
 

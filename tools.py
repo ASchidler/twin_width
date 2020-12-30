@@ -1,7 +1,8 @@
 from pysat.formula import CNF
 from pysat.card import CardEnc
 import os
-
+import networkx as nx
+import random
 
 def amo_commander(vars, vpool, m=2):
     formula = CNF()
@@ -75,15 +76,26 @@ def dot_export(g, u, v):
                     x3, x4 = min(n2, n), max(n2, n)
                     output2 += f"n{cln(x1)}_{cln(x2)} -- n{cln(x3)}_{cln(x4)} [color={cl}];{os.linesep}"
 
-
-
-
     return output1 + "}", output2 + "}"
 
 
 def find_modules(g):
     ordering = [x for x in g.nodes]
-    return _find_modules(g, ordering)
+    m = None
+    for _ in range(0, len(g.nodes)):
+        m = _find_modules(g, ordering)
+        if len(m) < len(g.nodes):
+            # for x in m:
+            #     if len(x) > 1:
+            #         xs = set(x)
+            #         nbs = [set(g.neighbors(cx)) - xs for cx in x]
+            #
+            #         if not all(cx == nbs[0] for cx in nbs):
+            #             print("ERROR")
+            return m
+        ordering.insert(0, ordering.pop())
+
+    return m
 
 
 def _find_modules(g, p):
@@ -125,11 +137,11 @@ def _find_modules(g, p):
 
         while centry is not None:
             if centry.can_pivot:
-                oentry = lst
-                passed_other = False
-                passed_center = False
 
                 for n in centry.elements:
+                    oentry = lst
+                    passed_other = False
+                    passed_center = False
                     nb = set(g.neighbors(n))
                     while oentry is not None:
                         if oentry is centry:
@@ -148,9 +160,10 @@ def _find_modules(g, p):
             centry = centry.next_entry
 
     modules = []
-    while lst is not None:
-        modules.append(list(lst.elements))
-        lst = lst.next_entry
+    c_lst = lst
+    while c_lst is not None:
+        modules.append(list(c_lst.elements))
+        c_lst = c_lst.next_entry
     return modules
 
 
@@ -260,3 +273,101 @@ def check_result(g, od, mg):
         cnt += 1
     # print(f"Done {c_max}/{d}")
     return c_max
+
+
+def prime_paley(p):
+    G = nx.Graph()
+
+    square_set = {(x ** 2) % p for x in range(1, p)}
+
+    for x in range(p):
+        for y in range(x+1, p):
+            if y - x in square_set:
+                G.add_edge(x, y)
+
+    return G
+
+
+def prime_square_paley(p):
+    """Generates the paley graph for p^2"""
+    # See: https://en.wikipedia.org/wiki/Finite_field
+    G = nx.Graph()
+
+    elements = {(x, y) for x in range(p) for y in range(p)}
+    squares = {((x*x - y*y) % p, (2 * x * y) % p) for x, y in elements}
+
+    for x1 in range(p):
+        for y1 in range(p):
+            for x2 in range(p):
+                for y2 in range(p):
+                    if x1 != x2 or y1 != y2:
+                        result = ((x2 - x1) % p, (y2 - y1) % p)
+                        if result[0] < 0:
+                            result = (p + result[0], result[1])
+                        if result[1] < 0:
+                            result = (result[0], p + result[1])
+
+                        if result in squares:
+                            G.add_edge((x1, y1), (x2, y2))
+
+    return G
+
+def paley49():
+    inp = "0111111100101010001011100010101000111010001010100"\
+    "1011111011000111001000101001010011001110001100010"\
+    "1101111101000101110001010010011010000100110011100"\
+    "1110111000111011010000011100100100100110100101001"\
+    "1111011011010000001111010100000111011001000001101"\
+    "1111101010011000110100100011100101000001111010010"\
+    "1111110100100100100110001101011000110001010100011"\
+    "1010001011111111000101001010101010010001011101000"\
+    "0100110101111101010010110001110001011001000111000"\
+    "0110100110111110100101010001001110001110000010011"\
+    "1001001111011100111000001110010100111010000011010"\
+    "0001110111101110101000110100000110100001111100100"\
+    "1001010111110101000110100110101001000110100000111"\
+    "0110001111111000011011001001010001100100111000101"\
+    "1101000101010001111111010001100010110010101100010"\
+    "0111000110001010111110100110110010001100010101001"\
+    "0010011001110011011110110100011100010100011010010"\
+    "0011010010100111101111001001110100000011100011100"\
+    "1100100000110111110110001110000011101101001010100"\
+    "0000111101001011111011001010001101001001100100011"\
+    "1000101010001111111100110001001001110010010001101"\
+    "1010100101000110010100111111110100011000101000101"\
+    "1100010010011001100011011111011100001010011100100"\
+    "0011100011010010100011101111001001110100100111000"\
+    "0101001100100100011101110111001101000111001101000"\
+    "0001101000111001101001111011110010010101000000111"\
+    "1010010100101001001101111101000011101000110011010"\
+    "0100011011000110010011111110100010100011010010011"\
+    "1001010110001011010001000101011111110101001010001"\
+    "0110001010100101110001100100101111111000100100110"\
+    "1010001101001000100110111000110111100111000110100"\
+    "0001110001110000110101101000111011101010011001001"\
+    "0110100101010011001000000111111101100011010001110"\
+    "0100110010001100001110011010111110110100101001010"\
+    "1001001000110110001010010011111111001000110110001"\
+    "1000101110100010100011010100110001001111111001010"\
+    "1100100011100001001101100010010100110111110110001"\
+    "0111000001001101101000011100101001011011111010001"\
+    "1101000001101010010010101001001110011101110001110"\
+    "0000111110010000011100001101101010011110110110100"\
+    "0011010000011110010101010010010001111111010100110"\
+    "0010011100010101100010100011000110111111101001001"\
+    "1100010100010110101001101000100101010100010111111"\
+    "0101001110010011000100111000011000101001101011111"\
+    "1010010011100000111000010011101000101101001101111"\
+    "0011100110100001010010011010000111010010011110111"\
+    "1010100000011100011011100100011010000011101111011"\
+    "0100011001101010100100000111010011010010101111101"\
+    "0001101001001101000111000101100100101100011111110"
+
+    g = nx.Graph()
+    for i in range(0, 49):
+        for j in range(0, 49):
+            idx = i * 49 + j
+            if inp[idx] == "1":
+                g.add_edge(i, j)
+
+    return g
