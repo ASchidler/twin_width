@@ -21,7 +21,8 @@ if len(sys.argv) > 2:
 
 
 def run_nauty(bnd):
-    popen = subprocess.Popen(["bin/geng", "-c", str(bnd)], stdout=subprocess.PIPE, universal_newlines=True)
+    m = bnd * (bnd-1) // 4 if bnd % 4 <= 1 else (bnd * (bnd-1)) // 4 + 1
+    popen = subprocess.Popen(["bin/geng", "-c", str(bnd), f"0:{m}"], stdout=subprocess.PIPE, universal_newlines=True)
     for stdout_line in iter(popen.stdout.readline, ""):
         yield stdout_line
     popen.stdout.close()
@@ -34,7 +35,7 @@ def add_runner(g_str):
     g = networkx.from_graph6_bytes(bytes(g_str.strip(), encoding="ascii"))
     modules = tools.find_modules(g)
     if len(modules) < len(g.nodes):
-        return None, None
+        return None, None, len(g.edges)
 
     enc = encoding.TwinWidthEncoding()
     if len(g.nodes) <= 2:
@@ -43,7 +44,7 @@ def add_runner(g_str):
         ub = min(heuristic.get_ub(g), heuristic.get_ub2(g))
         result = enc.run(g, Cadical, ub, verbose=False, check=False)
 
-    return result, g_str
+    return result, g_str, len(g.edges)
 
 
 c_smallest = -1
@@ -59,12 +60,23 @@ for i in range(nl.finished+1, 10):
 
     with Pool(processes=pool_size) as pool:
         new_smallest = c_smallest
+        m = i * (i - 1) // 4 if i % 4 <= 1 else (i * (i - 1)) // 4 + 1
 
-        for p_result, p_str in pool.imap_unordered(add_runner, run_nauty(i), chunksize=pool_size):
-            totals += 1
+        for p_result, p_str, p_edges in pool.imap_unordered(add_runner, run_nauty(i), chunksize=pool_size):
+            # This will be off, as we don't know how many complementary graphs will be connected?
+            totals += 2 if (i % 4 <= 1 or p_edges < m) and p_result is not None else 1
+
             if p_result is not None:
-                prime += 1
-                counts[p_result] += 1
+                factor = 2
+                if p_edges == m:
+                    if i % 4 <= 1:
+                        factor = 1
+                    else:
+                        factor = 0
+
+                # Self complementary / does not have a second one
+                prime += 1 * factor
+                counts[p_result] += 1 * factor
                 if p_result > c_smallest:
                     if p_result not in nl.nauty_smallest:
                         nl.nauty_smallest[p_result] = []
@@ -82,6 +94,10 @@ for i in range(nl.finished+1, 10):
         nl.nauty_counts[i][ci] = counts[ci]
 
     print(f"Finished {i}")
+    line = f"{i},\t{nl.nauty_total[i]},\t{nl.nauty_prime[i]}"
+    for k, c in nl.nauty_counts[i].items():
+        line += f",\t{k:} {c}"
+    print(line)
 
     with open("experiments/nauty_limits.py", "w") as nf:
         def print_dict(cd, sep_lines=True):

@@ -23,19 +23,31 @@ else:
     path = os.path.join(path2, instance)
 
 g = parser.parse(path)[0]
+from networkx.generators.expanders import paley_graph
+from networkx import Graph, from_graph6_bytes
+#g = paley_graph(53, create_using=Graph)
+#g = tools.prime_square_paley(5)
+#g = tools.prime_paley(13)
+
+#g = from_graph6_bytes(bytes('ECZW', encoding="ascii"))
+# from networkx.generators.lattice import grid_2d_graph
+g = grid_2d_graph(6, 7)
+#g = tools.paley49()
+print(f"{len(g.nodes)} {len(g.edges)}")
+
 x = tools.find_modules(g)
 
-
+#
 print(f"{len(g.nodes)} {len(g.edges)}")
 preprocessing.twin_merge(g)
-print(f"{len(g.nodes)} {len(g.edges)}")
-preprocessing.clique_merge(g)
-print(f"{len(g.nodes)} {len(g.edges)}")
-preprocessing.path_merge(g)
-print(f"{len(g.nodes)} {len(g.edges)}")
+# print(f"{len(g.nodes)} {len(g.edges)}")
+# preprocessing.clique_merge(g)
+# print(f"{len(g.nodes)} {len(g.edges)}")
+# preprocessing.path_merge(g)
+# print(f"{len(g.nodes)} {len(g.edges)}")
 
 if len(g.nodes) == 1:
-    print("Done, width: 1")
+    print("Done, width: 0")
     exit(0)
 
 # TODO: Deal with disconnected?
@@ -44,24 +56,10 @@ ub2 = heuristic.get_ub2(g)
 print(f"UB {ub} {ub2}")
 ub = min(ub, ub2)
 
-sg = [list(g.nodes)]
-# sg = list(bc.biconnected_components(g))
-# sg.sort(key=lambda x:len(x), reverse=True)
-cb = ub
-print(f"{len(sg)} components")
-for csg in sg:
-    if len(csg) > cb:
-        cg = nx.Graph()
-        for n1 in csg:
-            for n2 in csg:
-                if n1 < n2:
-                    if g.has_edge(n1, n2):
-                        cg.add_edge(n1, n2)
-
-        start = time.time()
-        enc = encoding.TwinWidthEncoding()
-        #enc = encoding2.TwinWidthEncoding2(g)
-        cb = enc.run(g, slv.Cadical, ub-1)
+start = time.time()
+enc = encoding.TwinWidthEncoding()
+#enc = encoding2.TwinWidthEncoding2(g)
+cb = enc.run(g, slv.Cadical, ub)
 
 print(f"Finished, result: {cb}")
 

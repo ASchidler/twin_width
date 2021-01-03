@@ -6,6 +6,7 @@ import tools
 import subprocess
 import time
 
+
 # TODO: Symmetry breaking: If two consecutive contractions have to node with red edges in common -> lex order
 class TwinWidthEncoding:
     def __init__(self):
@@ -214,8 +215,7 @@ class TwinWidthEncoding:
     def sb_ord(self, n, formula):
         for i in range(1, n):
             formula.append([self.ord[i][n]])
-            if i < n-1:
-                formula.append([self.ord[i][n-1]])
+            # TODO: Can we do the same for the second to last?
 
     def sb_grid(self, g, n, formula):
         smallest = {x: self.pool.id(f"smallest{x}") for x in range(1, n+1)}
@@ -267,6 +267,7 @@ class TwinWidthEncoding:
         for n in od[:-1]:
             t = unmap[mg[n]]
             n = unmap[n]
+            print(f"{n} => {t}")
             # graph_export, line_export = tools.dot_export(g, t, n)
             # with open(f"progress_{cnt}.dot", "w") as f:
             #     f.write(graph_export)

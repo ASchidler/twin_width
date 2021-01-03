@@ -293,8 +293,14 @@ def prime_square_paley(p):
     # See: https://en.wikipedia.org/wiki/Finite_field
     G = nx.Graph()
 
-    elements = {(x, y) for x in range(p) for y in range(p)}
-    squares = {((x*x - y*y) % p, (2 * x * y) % p) for x, y in elements}
+    # Find non-square, i.e. quadratic non-residue
+    p_squares = {(x*x) % p for x in range(1, p)}
+    n_squares = {x for x in range(1, p) if x not in p_squares}
+    m = next(iter(n_squares))
+
+    # Compute elements of p^2
+    elements = [(x, y) for x in range(p) for y in range(p)]
+    squares = {((x*x + m*y*y) % p, (2 * x * y) % p) for x, y in elements}
 
     for x1 in range(p):
         for y1 in range(p):
@@ -302,15 +308,11 @@ def prime_square_paley(p):
                 for y2 in range(p):
                     if x1 != x2 or y1 != y2:
                         result = ((x2 - x1) % p, (y2 - y1) % p)
-                        if result[0] < 0:
-                            result = (p + result[0], result[1])
-                        if result[1] < 0:
-                            result = (result[0], p + result[1])
-
                         if result in squares:
                             G.add_edge((x1, y1), (x2, y2))
 
     return G
+
 
 def paley49():
     inp = "0111111100101010001011100010101000111010001010100"\
