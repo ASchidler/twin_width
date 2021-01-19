@@ -1,0 +1,17 @@
+This is the code for computing the twin-width of graphs.
+
+We used Python 3.8, PySAT 1.6.0 and networkx 2.5
+
+The project can be run by using:
+python runner.py <path-to-instance-in-dimacs-format>
+
+The project contains the following files, except the runner:
+encoding.py - Contains the relative encoding
+encoding2.py - Contains the absolute encoding (using this encoding requires changing the comments in runner.py)
+heuristic.py - Contains the code to compute the upper bound
+preprocessing.py - Contains the only preprocessing we do - twin merge
+tools.py - This file contains many helper functions, including module computation, consistency checks and code
+to generate some named graphs.
+
+The folder bin contains the nauty binary.
+The folder experiments contains the code to run different experiments and extract the results, as well as the instances.

@@ -1,18 +1,16 @@
-import networkx
 import os
-from pysat.solvers import Cadical
-import preprocessing
-import encoding
-import heuristic
-import experiments.nauty_limits as nl
 import subprocess
 import sys
 from collections import defaultdict
-import threading
-import tools
-import time
+from multiprocessing import Pool
 
-from multiprocessing import Pool, Value, Array, Queue
+import networkx
+from pysat.solvers import Cadical
+
+import encoding
+import experiments.nauty_limits as nl
+import heuristic
+import tools
 
 solver = Cadical
 pool_size = 4

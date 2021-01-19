@@ -4,6 +4,7 @@ import os
 import networkx as nx
 import random
 
+
 def amo_commander(vars, vpool, m=2):
     formula = CNF()
     # Separate into list

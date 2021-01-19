@@ -1,10 +1,12 @@
 import os
+from multiprocessing import Pool
+
 import networkx as nx
 from networkx.generators.random_graphs import gnp_random_graph
-import encoding
 from pysat.solvers import Cadical
+
+import encoding
 import heuristic
-from multiprocessing import Pool, Value
 
 increment = 0.02
 num_graphs = 100
