@@ -11,6 +11,7 @@ from collections import defaultdict
 import threading
 import tools
 import time
+
 from multiprocessing import Pool, Value, Array, Queue
 
 solver = Cadical
@@ -53,7 +54,7 @@ for v in nl.nauty_counts.values():
         if v2 > 0:
             c_smallest = max(c_smallest, k2)
 
-for i in range(nl.finished+1, 10):
+for i in range(nl.finished+1, 12):
     totals = 0
     prime = 0
     counts = defaultdict(lambda: 0)
@@ -81,6 +82,7 @@ for i in range(nl.finished+1, 10):
                     if p_result not in nl.nauty_smallest:
                         nl.nauty_smallest[p_result] = []
                     nl.nauty_smallest[p_result].append(p_str)
+                    print(f"{p_result} {p_str}")
                     new_smallest = max(new_smallest, p_result)
 
         pool.close()

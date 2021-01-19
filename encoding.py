@@ -124,17 +124,18 @@ class TwinWidthEncoding:
         #print(f"{len(formula.clauses)} / {formula.nv}")
         return formula
 
-    def run(self, g, solver, start_bound, verbose=True, check=True):
+    def run(self, g, solver, start_bound, verbose=True, check=True, lb=0):
         start = time.time()
         formula = self.encode(g, start_bound)
         cb = start_bound
 
         if verbose:
             print(f"Created encoding in {time.time() - start}")
-
+        od = None
+        mg = None
         with solver() as slv:
             slv.append_formula(formula)
-            for i in range(start_bound, -1, -1):
+            for i in range(start_bound, lb-1, -1):
                 if verbose:
                     print(f"{slv.nof_clauses()}/{slv.nof_vars()}")
                 if slv.solve(assumptions=self.get_card_vars(i)):
@@ -142,7 +143,7 @@ class TwinWidthEncoding:
                     if verbose:
                         print(f"Found {i}")
                     if check:
-                        self.decode(slv.get_model(), g, i)
+                        mx, od, mg = self.decode(slv.get_model(), g, i)
                 else:
                     if verbose:
                         print(f"Failed {i}")
@@ -155,7 +156,11 @@ class TwinWidthEncoding:
         for v in self.totalizer.values():
             for t in v.values():
                 t.delete()
-        return cb
+
+        if od is None:
+            return cb
+        else:
+            return cb, od, mg
 
     def get_card_vars(self, d):
         vars = []
@@ -306,7 +311,9 @@ class TwinWidthEncoding:
                 c_max = max(c_max, cc)
             cnt += 1
         #print(f"Done {c_max}/{d}")
-        return c_max
+        od = [unmap[x] for x in od]
+        mg = {unmap[x]: unmap[y] for x, y in mg.items()}
+        return c_max, od, mg
 
     def sb_sth(self, g, formula, ub):
         n = len(g.nodes)
