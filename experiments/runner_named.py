@@ -7,7 +7,7 @@ import pysat.solvers as slv
 import encoding
 import heuristic
 import parser
-import preprocessing
+import test_preprocessing
 
 path = "experiments/instances"
 graphs = []
@@ -22,7 +22,7 @@ for cf in sorted(list(os.listdir(path))):
 graphs.sort(key=lambda x: (len(x[0].nodes), len(x[0].edges)))
 for g, cf in graphs:
     print(f"{cf}: {len(g.nodes)}")
-    preprocessing.twin_merge(g)
+    test_preprocessing.twin_merge(g)
 
     if len(g.nodes) == 1:
         print("Finished, result: 0\n\n")

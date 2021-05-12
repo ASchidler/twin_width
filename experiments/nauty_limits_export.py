@@ -7,6 +7,7 @@ from pysat.solvers import Cadical
 import encoding
 import experiments.nauty_limits as nl
 import heuristic
+import sys
 
 
 def dot_export(g, mg):
@@ -39,6 +40,21 @@ for k, v in nl.nauty_smallest.items():
             ub2 = heuristic.get_ub2(g)
             ub = min(ub, ub2)
 
+            lb = 0
+            glb = g.copy()
+            clb = sys.maxsize
+            cmn = None
+            for n1 in glb:
+                n1nb = set(glb.neighbors(n1))
+                for n2 in glb:
+                    if n1 < n2:
+                        n2nb = set(glb.neighbors(n2))
+                        reds = (n1nb ^ n2nb) - {n1, n2}
+                        if len(reds) < clb:
+                            clb = len(reds)
+                            cmn = n1
+                lb = max(lb, clb)
+            print(f"{lb}")
             enc = encoding.TwinWidthEncoding()
             cb, od, mg = enc.run(g, Cadical, ub, check=True)
 

@@ -25,14 +25,14 @@ for ck, cv in data.items():
     ax.scatter(scale, [x[1] for x in cv], marker=markers.pop())
     names.append(ck + " nodes")
 ax.legend(names)
-ax.set_xlabel('p')
+ax.set_xlabel('p', labelpad=-5)
 ax.set_ylabel('tww')
 
 #ax.set_title('Randomly generated graphs')
 ax.grid(True)
 
 plot.rcParams['savefig.pad_inches'] = 0
-plot.savefig("random.pdf")
+plot.savefig("random.pdf", bbox_inches='tight')
 plot.show()
 
 print("Done")

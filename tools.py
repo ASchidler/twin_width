@@ -1,8 +1,9 @@
-from pysat.formula import CNF
-from pysat.card import CardEnc
 import os
+import sys
+
 import networkx as nx
-import random
+from pysat.card import CardEnc
+from pysat.formula import CNF
 
 
 def amo_commander(vars, vpool, m=2):
@@ -57,27 +58,27 @@ def dot_export(g, u, v):
         cl = 'red' if 'red' in g[x][y] and g[x][y]['red'] else 'black'
         output1 += f"n{cln(x)} -- n{cln(y)} [color={cl}];{os.linesep}"
 
-    # Draw the linegraph
-    output2 = "strict graph dt {" + os.linesep
-    u, v = min(u, v), max(u, v)
-    for x, y in g.edges:
-        x, y = min(x, y), max(x, y)
-        color = 'green' if x == u and v == y else 'white'
-        fillcolor = 'red' if 'red' in g[x][y] and g[x][y]['red'] else 'black'
-        output2 += f"n{cln(x)}_{cln(y)} [" \
-        f"shape=box, fontsize=11,style=filled,fontcolor={color}," \
-        f"color={color}, fillcolor={fillcolor}];{os.linesep}"
+    # # Draw the linegraph
+    # output2 = "strict graph dt {" + os.linesep
+    # u, v = min(u, v), max(u, v)
+    # for x, y in g.edges:
+    #     x, y = min(x, y), max(x, y)
+    #     color = 'green' if x == u and v == y else 'white'
+    #     fillcolor = 'red' if 'red' in g[x][y] and g[x][y]['red'] else 'black'
+    #     output2 += f"n{cln(x)}_{cln(y)} [" \
+    #     f"shape=box, fontsize=11,style=filled,fontcolor={color}," \
+    #     f"color={color}, fillcolor={fillcolor}];{os.linesep}"
+    #
+    # for n in g.nodes:
+    #     for n1 in g[n]:
+    #         x1, x2 = min(n1, n), max(n1, n)
+    #         for n2 in g[n]:
+    #             if n2 > n1:
+    #                 cl = 'green' if n1 == u and n2 == v else 'black'
+    #                 x3, x4 = min(n2, n), max(n2, n)
+    #                 output2 += f"n{cln(x1)}_{cln(x2)} -- n{cln(x3)}_{cln(x4)} [color={cl}];{os.linesep}"
 
-    for n in g.nodes:
-        for n1 in g[n]:
-            x1, x2 = min(n1, n), max(n1, n)
-            for n2 in g[n]:
-                if n2 > n1:
-                    cl = 'green' if n1 == u and n2 == v else 'black'
-                    x3, x4 = min(n2, n), max(n2, n)
-                    output2 += f"n{cln(x1)}_{cln(x2)} -- n{cln(x3)}_{cln(x4)} [color={cl}];{os.linesep}"
-
-    return output1 + "}", output2 + "}"
+    return output1 + "}"
 
 
 def find_modules(g):
@@ -166,74 +167,6 @@ def _find_modules(g, p):
         modules.append(list(c_lst.elements))
         c_lst = c_lst.next_entry
     return modules
-
-
-def solve_grid(g, ub):
-    g2 = g.copy()
-    for u, v in g2.edges:
-        g2[u][v]["red"] = False
-
-    od, mg = _solve_grid(g2, ub)
-
-    if not check_result(g, od, mg):
-        print("Error")
-
-    print("Found")
-
-
-def _solve_grid(g, ub):
-    # find merges:
-    contractions = []
-    if len(g.nodes) <= ub:
-        return list(g.nodes), {}
-
-    for n in g.nodes:
-        nbs = set()
-        for n2 in g._adj[n]:
-            nbs.add(n2)
-            nbs.update(g._adj[n2])
-
-        for cnb in nbs:
-            if cnb > n:
-                shared = g._adj[n].keys() & g._adj[cnb].keys()
-                excl = g._adj[n].keys() ^ g._adj[cnb].keys()
-                excl.discard(n)
-                excl.discard(cnb)
-                reds = []
-
-                for cn in shared:
-                    if g._adj[n][cn]["red"] or g._adj[cnb][cn]["red"]:
-                       reds.append(cn)
-                reds.extend(excl)
-
-                if len(reds) <= ub:
-                    contractions.append(((n, cnb),
-                                         [x for x in reds if x not in g._adj[cnb]],
-                                         [x for x in reds if x in g._adj[cnb] and not g._adj[cnb][x]["red"]]))
-
-    for contr, newr, turnr in contractions:
-        u, v = contr
-        for x in newr:
-            g.add_edge(x, v, red=True)
-        for x in turnr:
-            g[x][v]["red"] = True
-        edges = [x for x in g._adj[u].items()]
-        g.remove_node(u)
-
-        result = _solve_grid(g, ub)
-        if result is not None:
-            result[0].append(u)
-            result[1][u] = v
-            return result
-
-        for x in newr:
-            g.remove_edge(x, v)
-        for x in turnr:
-            g[x][v]["red"] = False
-        for x, y in edges:
-            g.add_edge(u, x, red=y["red"])
-
-    return None
 
 
 def check_result(g, od, mg):
@@ -348,75 +281,223 @@ def line(n):
     return g
 
 
-def solve_paley(g):
-    g = g.copy()
-    for u, v in g.edges:
-        g[u][v]['red'] = False
-    n = len(g.nodes)
-    tww = 0
-    contracted = set()
-    while len(g.nodes) > (n-1)/2:
-        cu = None
-        cv = None
-        shared = None
-        found = False
-        for u in g.nodes:
-            if u not in contracted:
-                for v in g.nodes:
-                    if u != v and v not in contracted:
-                        shared = set(g.neighbors(u)) & set(g.neighbors(v))
-                        non_shared = set(g.neighbors(u)) ^ set(g.neighbors(v))
-                        non_shared.discard(u)
-                        non_shared.discard(v)
+def solve_grid2(d1, d2, ub):
+    # Create adjacency matrix
+    adj = [[0 for _ in range(0, d1 * d2)] for _ in range(0, d1 * d2)]
 
-                        # too_large = False
-                        # for w in non_shared:
-                        #     nr = 0
-                        #     for wp in g.neighbors(w):
-                        #         if g[w][wp]['red']:
-                        #             nr += 1
-                        #     if nr == n-1/2:
-                        #         too_large = True
-                        #         break
-                        # if too_large:
-                        #     continue
+    for i in range(0, d1):
+        for j in range(0, d2):
+            co1 = i * d1 + j
 
-                        diff = ((n-1) / 2 - len(list(g.neighbors(u)))) + ((n-1) / 2 - len(list(g.neighbors(v))))
-                        sr = 0
-                        for w in shared:
-                            if g[u][w]['red'] or g[v][w]['red']:
-                                sr += 1
+            for xoff, yoff in [(-1, 0), (1, 0), (0, -1), (-1, 0)]:
+                if 0 < i + xoff < d1 and 0 < j + yoff < d2:
+                    co2 = (i+xoff) * d1 + (j+yoff)
+                    # This should set both directions
+                    adj[co1][co2] = 1
 
-                        if sr <= diff:
-                            cu = u
-                            cv = v
-                            found = True
-                            if v not in g[u]:
+    contracted = [False for _ in range(0, d1 * d2)]
+    counts = [0 for _ in range(0, d1*d2)]
+    od = []
+    mg = {}
+
+    if solve_grid2_(d1, d2, ub, adj, contracted, od, mg, counts):
+        # Complete order
+        missing = []
+        for c_node in range(0, d1*d2):
+            if not contracted[c_node]:
+                missing.append((c_node // d1, c_node % d1))
+
+        for i in range(0, len(missing)-1):
+            od.append(missing[i])
+            mg[missing[i]] = missing[i+1]
+
+        g = nx.Graph()
+        for i in range(0, d1):
+            for j in range(0, d2):
+                for xoff, yoff in [(-1, 0), (1, 0), (0, -1), (-1, 0)]:
+                    if 0 <= i + xoff < d1 and 0 <= j + yoff < d2:
+                        g.add_edge((i, j), (i+xoff, j+yoff))
+
+        if check_result(g, od, mg) > ub:
+            raise RuntimeError("Invalid solution found")
+        for c_n in od:
+            print(f"{c_n}: {mg[c_n]}")
+        return True
+
+    return False
+
+
+def solve_grid2_(d1, d2, ub, adj, contracted, od, mg, counts):
+    # Check if graph is fully contracted
+    if d1 * d2 - len(od) <= ub:
+        return True
+
+    found_any = False
+    for i in range(0, d1):
+        if len(od) == 1 and i > 0:
+            continue
+        for j in range(0, d2):
+            if len(od) == 1 and j > 0:
+                continue
+            cc = i * d1 + j
+            if not contracted[cc]:
+                # Search neighborhood. The way this works, the other index is always bigger
+                for xoff, yoff in [(1, -1), (1, 0), (2, 0), (1, 1), (0, 1), (0, 2)]:
+                    cc2 = (i + xoff) * d1 + (j + yoff)
+                    if 0 <= i + xoff < d1 and 0 <= j + yoff < d2 and not contracted[cc2]:
+                        found_any = True
+                        reds = 0
+                        new_red = []
+
+                        for k in range(0, d1 * d2):
+                            if contracted[k]:
+                                continue
+                            if adj[cc2][k] == 2:
+                                reds += 1
+                            elif adj[cc][k] == 2 and adj[cc2][k] <= 1:
+                                reds += 1
+                                new_red.append((cc2, k, adj[cc2][k]))
+                                new_red.append((k, cc2, adj[cc2][k]))
+                                if counts[k] == ub:
+                                    reds = sys.maxsize
+                                    break
+                            elif adj[cc][k] == 1 and adj[cc2][k] == 0:
+                                reds += 1
+                                new_red.append((cc2, k, 0))
+                                new_red.append((k, cc2, 0))
+                                if counts[k] == ub:
+                                    reds = sys.maxsize
+                                    break
+                            elif adj[cc][k] == 0 and adj[cc2][k] == 1:
+                                reds += 1
+                                new_red.append((cc2, k, 1))
+                                new_red.append((k, cc2, 1))
+                                if counts[k] == ub:
+                                    reds = sys.maxsize
+                                    break
+                            if reds > ub:
                                 break
-        if not found:
-            print("Error")
-            exit(1)
-        u = cu
-        v = cv
-        shared = set(g.neighbors(u)) & set(g.neighbors(v))
-        print(f"{u} {v}")
-        for w in g.neighbors(v):
-            if w not in shared:
-                g[v][w]['red'] = True
-        for w in g.neighbors(u):
-            if w != u and w != v:
-                if w not in shared:
-                    g.add_edge(v, w, red=True)
-                elif g[u][w]['red']:
-                    g[v][w]['red'] = True
-        contracted.update([u, v])
-        g.remove_node(u)
 
-        for u in g.nodes:
-            width = 0
-            for v in g.neighbors(u):
-                if g[u][v]['red']:
-                    width += 1
-            tww = max(tww, width)
+                        if reds <= ub:
+                            contracted[cc] = True
+                            for ce1, ce2, _ in new_red:
+                                adj[ce1][ce2] = 2
+                                counts[ce1] += 1
+                            od.append((i, j))
+                            mg[(i, j)] = (i+xoff, j+yoff)
+                            if solve_grid2_(d1, d2, ub, adj, contracted, od, mg, counts):
+                                return True
+                            contracted[cc] = False
+                            od.pop()
+                            mg.pop((i, j))
+                            for ce1, ce2, p in new_red:
+                                adj[ce1][ce2] = p
+                                counts[ce1] -= 1
+                        else:
+                            print(f"Conflict {len(od)}")
+    if not found_any:
+        return False
 
-    print(f"{tww}")
+
+def solve_quick(g, ub=sys.maxsize):
+    nodes = {x: i for i, x in enumerate(g.nodes)}
+
+    adj = [[0 for _ in range(0, len(nodes))] for _ in range(0, len(nodes))]
+    for n in g.nodes:
+        nid = nodes[n]
+        for n2 in g.neighbors(n):
+            adj[nid][nodes[n2]] = 1
+
+    # Find degree two neighborhood
+    nbs = [set() for _ in range(0, len(nodes))]
+
+    for n in g.nodes:
+        q = [(n, 0)]
+        lst = nbs[nodes[n]]
+        while q:
+            c_n, d = q.pop()
+
+            if d < 2:
+                for n2 in g.neighbors(c_n):
+                    lst.add(nodes[n2])
+                    q.append((n2, d+1))
+
+        lst.remove(nodes[n])
+
+    for i, lst in enumerate(nbs):
+        nbs[i] = [x for x in lst if x > i]
+
+    contracted = [False for _ in range(0, len(nodes))]
+    counts = [0 for _ in range(0, len(nodes))]
+    od = []
+    mg = {}
+    solve_quick_(adj, nbs, contracted, od, mg, ub, counts)
+
+
+def solve_quick_(adj, nbs, contracted, od, mg, ub, counts):
+    if len(adj) - len(od) == 1:
+        return max(counts), list(od), {x: y for x, y in mg.items()}
+
+    best = None
+
+    for i in range(0, len(adj)):
+        if not contracted[i]:
+            for j in nbs[i]:
+                if not contracted[j]:
+                    reds = 0
+                    new_red = []
+
+                    for k in range(0, len(adj)):
+                        if contracted[k]:
+                            continue
+                        if adj[j][k] == 2:
+                            reds += 1
+                        elif adj[i][k] == 2 and adj[j][k] < 2:
+                            reds += 1
+                            new_red.append((j, k, adj[j][k]))
+                            new_red.append((k, j, adj[j][k]))
+                            if counts[k] == ub:
+                                ub = sys.maxsize
+                                break
+                        elif adj[i][k] == 1 and adj[j][k] == 0:
+                            reds += 1
+                            new_red.append((j, k, 0))
+                            new_red.append((k, j, 0))
+                            if counts[k] == ub:
+                                ub = sys.maxsize
+                                break
+                        elif adj[i][k] == 0 and adj[j][k] == 1:
+                            reds += 1
+                            new_red.append((j, k, 1))
+                            new_red.append((k, j, 1))
+                            if counts[k] == ub:
+                                ub = sys.maxsize
+                                break
+
+                        if reds > ub:
+                            break
+
+                    if reds <= ub:
+                        contracted[i] = True
+
+                        for ce1, ce2, _ in new_red:
+                            adj[ce1][ce2] = 2
+                            counts[ce1] += 1
+                        od.append(i)
+                        mg[i] = j
+
+                        result = solve_quick_(adj, nbs, contracted, od, mg, ub, counts)
+                        if result is not None:
+                            best = result
+                            ub = result[0]
+
+                        contracted[i] = False
+                        od.pop()
+                        mg.pop(i)
+                        for ce1, ce2, p in new_red:
+                            adj[ce1][ce2] = p
+                            counts[ce1] -= 1
+                    else:
+                        print(f"Conflict {len(od)}")
+
+    return best
