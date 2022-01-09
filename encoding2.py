@@ -3,7 +3,7 @@ import time
 from networkx import Graph
 from pysat.card import CardEnc, EncType
 from pysat.formula import CNF, IDPool
-
+from threading import Timer
 import tools
 
 
@@ -204,24 +204,42 @@ class TwinWidthEncoding2:
         print(f"{len(self.formula.clauses)} / {self.formula.nv}")
         return self.formula
 
-    def run(self, g, solver, start_bound, verbose=True, check=True):
+    def run(self, g, solver, start_bound, verbose=True, check=True, timeout=0):
         start = time.time()
         cb = start_bound
 
         if verbose:
             print(f"Created encoding in {time.time() - start}")
 
-        for i in range(start_bound, -1, -1):
+        done = []
+        c_slv = None
+        def interrupt():
+            if c_slv is not None:
+                c_slv.interrupt()
+            done.append(True)
+
+        timer = None
+        if timeout > 0:
+            timer = Timer(timeout, interrupt)
+            timer.start()
+
+        i = start_bound
+        while i >= 0:
+            if done:
+                break
             with solver() as slv:
+                c_slv = slv
                 formula = self.encode(g, i)
                 slv.append_formula(formula)
 
-                if slv.solve():
-                    cb = i
+                if done:
+                    break
+
+                if slv.solve() if timeout == 0 else slv.solve_limited():
                     if verbose:
                         print(f"Found {i}")
-                    if check:
-                        self.decode(slv.get_model(), g, i)
+                    cb = self.decode(slv.get_model(), g, i)
+                    i = cb - 1
                 else:
                     if verbose:
                         print(f"Failed {i}")
@@ -229,7 +247,8 @@ class TwinWidthEncoding2:
 
                 if verbose:
                     print(f"Finished cycle in {time.time() - start}")
-
+        if timer is not None:
+            timer.cancel()
         return cb
 
     def decode(self, model, g, d):
@@ -312,3 +331,5 @@ class TwinWidthEncoding2:
 
             step += 1
         print(f"Done {c_max}/{d}")
+
+        return c_max

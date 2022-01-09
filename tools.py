@@ -289,18 +289,19 @@ def solve_grid2(d1, d2, ub):
         for j in range(0, d2):
             co1 = i * d1 + j
 
-            for xoff, yoff in [(-1, 0), (1, 0), (0, -1), (-1, 0)]:
-                if 0 < i + xoff < d1 and 0 < j + yoff < d2:
+            for xoff, yoff in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                if 0 <= i + xoff < d1 and 0 <= j + yoff < d2:
                     co2 = (i+xoff) * d1 + (j+yoff)
                     # This should set both directions
                     adj[co1][co2] = 1
 
     contracted = [False for _ in range(0, d1 * d2)]
     counts = [0 for _ in range(0, d1*d2)]
+    target = [0 for _ in range(0, d1 * d2)]
     od = []
     mg = {}
 
-    if solve_grid2_(d1, d2, ub, adj, contracted, od, mg, counts):
+    if solve_grid2_(d1, d2, ub, adj, contracted, od, mg, counts, target):
         # Complete order
         missing = []
         for c_node in range(0, d1*d2):
@@ -327,76 +328,66 @@ def solve_grid2(d1, d2, ub):
     return False
 
 
-def solve_grid2_(d1, d2, ub, adj, contracted, od, mg, counts):
+def solve_grid2_(d1, d2, ub, adj, contracted, od, mg, counts, target):
     # Check if graph is fully contracted
     if d1 * d2 - len(od) <= ub:
         return True
 
-    found_any = False
-    for i in range(0, d1):
-        if len(od) == 1 and i > 0:
+    for cc in range(0, d1*d2):
+        # Make upper left corner the first node the contract
+        if contracted[cc] or (len(od) == 0 and cc > 0):
             continue
-        for j in range(0, d2):
-            if len(od) == 1 and j > 0:
-                continue
-            cc = i * d1 + j
-            if not contracted[cc]:
-                # Search neighborhood. The way this works, the other index is always bigger
-                for xoff, yoff in [(1, -1), (1, 0), (2, 0), (1, 1), (0, 1), (0, 2)]:
-                    cc2 = (i + xoff) * d1 + (j + yoff)
-                    if 0 <= i + xoff < d1 and 0 <= j + yoff < d2 and not contracted[cc2]:
-                        found_any = True
-                        reds = 0
-                        new_red = []
 
-                        for k in range(0, d1 * d2):
-                            if contracted[k]:
-                                continue
-                            if adj[cc2][k] == 2:
-                                reds += 1
-                            elif adj[cc][k] == 2 and adj[cc2][k] <= 1:
-                                reds += 1
-                                new_red.append((cc2, k, adj[cc2][k]))
-                                new_red.append((k, cc2, adj[cc2][k]))
-                                if counts[k] == ub:
-                                    reds = sys.maxsize
-                                    break
-                            elif adj[cc][k] == 1 and adj[cc2][k] == 0:
-                                reds += 1
-                                new_red.append((cc2, k, 0))
-                                new_red.append((k, cc2, 0))
-                                if counts[k] == ub:
-                                    reds = sys.maxsize
-                                    break
-                            elif adj[cc][k] == 0 and adj[cc2][k] == 1:
-                                reds += 1
-                                new_red.append((cc2, k, 1))
-                                new_red.append((k, cc2, 1))
-                                if counts[k] == ub:
-                                    reds = sys.maxsize
-                                    break
-                            if reds > ub:
-                                break
+        # Find two d2 neighbors
+        nbs = set()
+        for cx in range(cc, len(adj)):
+            if not contracted[cx] and adj[cc][cx] > 0:
+                nbs.add(cx)
+                nbs.update((cx2 for cx2 in range(cx, len(adj)) if not contracted[cx2] and adj[cx][cx2] > 0))
 
-                        if reds <= ub:
-                            contracted[cc] = True
-                            for ce1, ce2, _ in new_red:
-                                adj[ce1][ce2] = 2
-                                counts[ce1] += 1
-                            od.append((i, j))
-                            mg[(i, j)] = (i+xoff, j+yoff)
-                            if solve_grid2_(d1, d2, ub, adj, contracted, od, mg, counts):
-                                return True
-                            contracted[cc] = False
-                            od.pop()
-                            mg.pop((i, j))
-                            for ce1, ce2, p in new_red:
-                                adj[ce1][ce2] = p
-                                counts[ce1] -= 1
-                        else:
-                            print(f"Conflict {len(od)}")
-    if not found_any:
-        return False
+        contracted[cc] = True
+        od.append((cc // d1, cc % d1))
+        for cc2 in nbs:
+            any_targets = target[cc2]  # Keeps track of independent merges
+            reds = 0  # Red degree of cc2 after merge
+            new_red = []  # Red edges to introduce
+            for k in range(0, d1 * d2):
+                if contracted[k] or k == cc or k == cc2:
+                    continue
+                if adj[cc2][k] == 2:
+                    reds += 1
+                elif (adj[cc][k] == 2 and adj[cc2][k] <= 1) \
+                        or (adj[cc][k] == 1 and adj[cc2][k] == 0)\
+                        or (adj[cc][k] == 0 and adj[cc2][k] == 1):
+                    any_targets = max(any_targets, target[k])
+                    reds += 1
+                    new_red.append((cc2, k, adj[cc2][k]))
+                    new_red.append((k, cc2, adj[cc2][k]))
+                    if counts[k] == ub:
+                        reds = sys.maxsize
+                        break
+                if reds > ub:
+                    break
+
+            # Second statement says that independent contractions must be performed lexicographically
+            if reds <= ub and all(x[0] * d1 + x[1] < cc for x in od[any_targets:-1]):
+                for ce1, ce2, _ in new_red:
+                    adj[ce1][ce2] = 2
+                    counts[ce1] += 1
+                prev_t = target[cc2]
+                target[cc2] = len(od)
+                if solve_grid2_(d1, d2, ub, adj, contracted, od, mg, counts, target):
+                    mg[(cc // d1, cc % d1)] = (cc2 // d1, cc2 % d1)
+                    return True
+                target[cc2] = prev_t
+                for ce1, ce2, p in new_red:
+                    adj[ce1][ce2] = p
+                    counts[ce1] -= 1
+
+        od.pop()
+        contracted[cc] = False
+    #print(f"{len(od)}")
+    return False
 
 
 def solve_quick(g, ub=sys.maxsize):
