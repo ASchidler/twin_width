@@ -1,10 +1,11 @@
-from networkx import Graph
-from functools import cmp_to_key
-from pysat.formula import CNF, IDPool
-from pysat.card import ITotalizer, CardEnc, EncType
-import tools
-import subprocess
 import time
+from functools import cmp_to_key
+
+from networkx import Graph
+from pysat.card import ITotalizer, CardEnc
+from pysat.formula import CNF, IDPool
+
+import tools
 
 
 # TODO: Symmetry breaking: If two consecutive contractions have to node with red edges in common -> lex order
@@ -88,7 +89,7 @@ class TwinWidthEncoding:
                 formula.append([-self.merge[i][j], self.tord(i, j)])
                 
         # single merge target
-        for i in range(1, len(g.nodes) + 1):
+        for i in range(1, len(g.nodes)):
             formula.extend(CardEnc.atleast([self.merge[i][j] for j in range(i + 1, len(g.nodes) + 1)], bound=1, vpool=self.pool))
             formula.extend(tools.amo_commander([self.merge[i][j] for j in range(i + 1, len(g.nodes) + 1)], self.pool))
 
@@ -137,16 +138,16 @@ class TwinWidthEncoding:
             slv.append_formula(formula)
             for i in range(start_bound, lb-1, -1):
                 if verbose:
-                    print(f"{slv.nof_clauses()}/{slv.nof_vars()}")
+                    print(f"Clauses: {slv.nof_clauses()} Variables: {slv.nof_vars()}")
                 if slv.solve(assumptions=self.get_card_vars(i)):
                     cb = i
                     if verbose:
-                        print(f"Found {i}")
+                        print(f"Found witness for Twin-Width {i}")
                     if check:
                         mx, od, mg = self.decode(slv.get_model(), g, i)
                 else:
                     if verbose:
-                        print(f"Failed {i}")
+                        print(f"Failed for Twin-Width {i}")
                         print(f"Finished cycle in {time.time() - start}")
                     break
 
