@@ -37,3 +37,32 @@ def parse(path):
     f.close()
 
     return g, c_vertices
+
+
+def parse_cnf(path):
+    if path.lower().endswith(".bz2"):
+        f = bz2.open(path, mode='rb')
+    else:
+        f = open(path)
+
+    g = nx.DiGraph()
+
+    clause = 1
+    for cl in f:
+        try:
+            cl = cl.decode('ascii')
+        except AttributeError:
+            pass
+
+        if not cl.startswith("p") and not cl.startswith("c") and not cl.startswith("%"):
+            if len(cl.strip()) != 0:
+                fields = [int(x.strip()) for x in cl.strip().split(" ") if x.strip() != "0"]
+                if len(fields) > 0:
+                    for cf in fields:
+                        if cf > 0:
+                            g.add_edge(f"c{clause}", f"v{abs(cf)}")
+                        else:
+                            g.add_edge(f"v{abs(cf)}", f"c{clause}")
+                    clause += 1
+
+    return g

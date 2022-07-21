@@ -1,11 +1,10 @@
-import time
-from functools import cmp_to_key
-
 from networkx import Graph
-from pysat.card import ITotalizer, CardEnc
+from functools import cmp_to_key
 from pysat.formula import CNF, IDPool
-
+from pysat.card import ITotalizer, CardEnc, EncType
 import tools
+import subprocess
+import time
 
 
 # TODO: Symmetry breaking: If two consecutive contractions have to node with red edges in common -> lex order
@@ -138,16 +137,16 @@ class TwinWidthEncoding:
             slv.append_formula(formula)
             for i in range(start_bound, lb-1, -1):
                 if verbose:
-                    print(f"Clauses: {slv.nof_clauses()} Variables: {slv.nof_vars()}")
+                    print(f"{slv.nof_clauses()}/{slv.nof_vars()}")
                 if slv.solve(assumptions=self.get_card_vars(i)):
                     cb = i
                     if verbose:
-                        print(f"Found witness for Twin-Width {i}")
+                        print(f"Found {i}")
                     if check:
-                        mx, od, mg = self.decode(slv.get_model(), g, i)
+                        mx, od, mg = self.decode(slv.get_model(), g, i, verbose)
                 else:
                     if verbose:
-                        print(f"Failed for Twin-Width {i}")
+                        print(f"Failed {i}")
                         print(f"Finished cycle in {time.time() - start}")
                     break
 
@@ -238,7 +237,7 @@ class TwinWidthEncoding:
         quadrant = [z for (x, y), z in self.node_map.items() if y <= width and z <= width]
         formula.append([smallest[i] for i in quadrant])
 
-    def decode(self, model, g, d):
+    def decode(self, model, g, d, verbose=False):
         g = g.copy()
         model = {abs(x): x > 0 for x in model}
         unmap = {}
@@ -273,7 +272,8 @@ class TwinWidthEncoding:
         for n in od[:-1]:
             t = unmap[mg[n]]
             n = unmap[n]
-            print(f"{n} => {t}")
+            if verbose:
+                print(f"{n} => {t}")
             # graph_export, line_export = tools.dot_export(g, t, n)
             # with open(f"progress_{cnt}.dot", "w") as f:
             #     f.write(graph_export)
