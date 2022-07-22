@@ -1,11 +1,15 @@
-from networkx import Graph
+import sys
+
+import networkx
+import networkx as nx
+from networkx import DiGraph
 from functools import cmp_to_key
 from pysat.formula import CNF, IDPool
 from pysat.card import ITotalizer, CardEnc, EncType
 import tools
 import subprocess
 import time
-
+import networkx.algorithms.bipartite as bp
 
 # TODO: Symmetry breaking: If two consecutive contractions have to node with red edges in common -> lex order
 class TwinWidthEncoding:
@@ -16,11 +20,24 @@ class TwinWidthEncoding:
         self.node_map = None
         self.pool = IDPool()
         self.totalizer = None
+        self.partition1 = None
+        self.partition2 = None
+        self.partition_sep = 0
 
     def remap_graph(self, g):
+        try:
+            self.partition1, self.partition2 = bp.sets(g)
+        except networkx.AmbiguousSolution:
+            self.partition1 = set(x for x in g.nodes if x.startwith("v"))
+            self.partition2 = set(x for x in g.nodes if x.startwith("c"))
+
         self.node_map = {}
         cnt = 1
-        gn = Graph()
+        gn = DiGraph()
+
+        self.node_map = {n: cnt+1 for (cnt, n) in enumerate(self.partition1)}
+        self.partition_sep = max(self.node_map.values())
+        self.node_map = {n: cnt+1+len(self.partition1) for (cnt, n) in enumerate(self.partition2)}
 
         for u, v in g.edges():
             if u not in self.node_map:
@@ -30,34 +47,34 @@ class TwinWidthEncoding:
                 self.node_map[v] = cnt
                 cnt += 1
 
-            gn.add_edge(self.node_map[u], self.node_map[v])
+            gn.add_edge(self.node_map[u], self.node_map[v], **g[u][v])
 
         return gn
 
     def init_var(self, g):
+        if self.partition1 is None:
+            try:
+                self.partition1, self.partition2 = bp.sets(g)
+            except networkx.AmbiguousSolution:
+                self.partition1 = set(x for x in g.nodes if x.startwith("v"))
+                self.partition2 = set(x for x in g.nodes if x.startwith("c"))
+
         self.edge = [[{} for _ in range(0, len(g.nodes) + 1)]  for _ in range(0, len(g.nodes) + 1)]
         self.ord = [{} for _ in range(0, len(g.nodes) + 1)]
         self.merge = [{} for _ in range(0, len(g.nodes) + 1)]
 
         for i in range(1, len(g.nodes) + 1):
             for j in range(i + 1, len(g.nodes) + 1):
-                for k in range(1, len(g.nodes) + 1):
-                    self.edge[k][i][j] = self.pool.id(f"edge{k}_{i}_{j}")
                 self.ord[i][j] = self.pool.id(f"ord{i}_{j}")
-                self.merge[i][j] = self.pool.id(f"merge{i}_{j}")
+                self.ord[j][i] = -self.ord[i][j]
+                if (i <= self.partition_sep and j <= self.partition_sep) or (i > self.partition_sep and j > self.partition_sep):
+                    self.merge[i][j] = self.pool.id(f"merge{i}_{j}")
 
-    def tord(self, i, j):
-        if i < j:
-            return self.ord[i][j]
-
-        return -self.ord[j][i]
-
-    def tedge(self, n, i, j):
-        if i < j:
-            return self.edge[n][i][j]
-
-        return self.edge[n][j][i]
-
+                if i <= self.partition_sep and j > self.partition_sep:
+                    for k in range(1, len(g.nodes) + 1):
+                        self.edge[k][i][j] = self.pool.id(f"edge{k}_{i}_{j}")
+                        self.edge[k][j][i] = self.edge[k][i][j]
+        print("x")
     # def tmerge(self, i, j):
     #     if i < j:
     #         return self.merge[i][j]
@@ -80,30 +97,36 @@ class TwinWidthEncoding:
                     if i == k or j == k:
                         continue
 
-                    formula.append([-self.tord(i, j), -self.tord(j, k), self.tord(i, k)])
+                    formula.append([-self.ord[i][j], -self.ord[j][k], self.ord[i][k]])
         
         # Merge/ord relationship
         for i in range(1, len(g.nodes) + 1):            
             for j in range(i+1, len(g.nodes) + 1):
-                formula.append([-self.merge[i][j], self.tord(i, j)])
+                if j in self.merge[i]:
+                    formula.append([-self.merge[i][j], self.ord[i][j]])
                 
         # single merge target
         for i in range(1, len(g.nodes)):
-            formula.extend(CardEnc.atleast([self.merge[i][j] for j in range(i + 1, len(g.nodes) + 1)], bound=1, vpool=self.pool))
-            formula.extend(tools.amo_commander([self.merge[i][j] for j in range(i + 1, len(g.nodes) + 1)], self.pool))
+            if len(self.merge[i]) > 0:
+                formula.extend(CardEnc.atleast([self.merge[i][j] for j in range(i + 1, len(g.nodes) + 1) if j in self.merge[i]], bound=1, vpool=self.pool))
+            formula.extend(tools.amo_commander([self.merge[i][j] for j in range(i+ 1, len(g.nodes) + 1) if j in self.merge[i]], self.pool))
 
         # Create red arcs
         for i in range(1, len(g.nodes) + 1):
-            inb = set(g.neighbors(i))
+            suc = set(g.successors(i))
+            pred = set(g.predecessors(i))
+
             for j in range(i+1, len(g.nodes) + 1):
-                jnb = set(g.neighbors(j))
-                jnb.discard(i)
-                diff = jnb ^ inb  # Symmetric difference
+                jsuc = set(g.successors(j))
+                jpred = set(g.predecessors(j))
+                diff = (jpred ^ suc) | (jsuc ^ pred)
+                diff.discard(i)
                 diff.discard(j)
 
                 for k in diff:
                     # TODO: On dense graphs one could use the complementary graph...
-                    formula.append([-self.merge[i][j], -self.tord(i, k), self.tedge(i, j, k)])
+                    if j in self.merge[i] and k in self.edge[i][j]:
+                        formula.append([-self.merge[i][j], -self.ord[i][k], self.edge[i][j][k]])
 
         self.encode_reds2(g, formula)
         #self.perf(n, formula)
@@ -113,7 +136,7 @@ class TwinWidthEncoding:
         for i in range(1, len(g.nodes)): # As last one is the root, no counter needed
             self.totalizer[i] = {}
             for x in range(1, len(g.nodes) + 1):
-                vars = [self.tedge(i, x, y) for y in range(1, len(g.nodes)+1) if x != y]
+                vars = [self.edge[i][x][y] for y in range(1, len(g.nodes)+1) if y in self.edge[i][x]]
                 self.totalizer[i][x] = ITotalizer(vars, ubound=d, top_id=self.pool.id(f"totalizer{i}_{x}"))
                 formula.extend(self.totalizer[i][x].cnf)
                 self.pool.occupy(self.pool.top-1, self.totalizer[i][x].top_id)
@@ -138,20 +161,26 @@ class TwinWidthEncoding:
             for i in range(start_bound, lb-1, -1):
                 if verbose:
                     print(f"{slv.nof_clauses()}/{slv.nof_vars()}")
-                if slv.solve(assumptions=self.get_card_vars(i)):
+                slv.append_formula([[x] for x in self.get_card_vars(i)])
+
+                if slv.solve():
                     cb = i
                     if verbose:
                         print(f"Found {i}")
+                        sys.stdout.flush()
                     if check:
                         mx, od, mg = self.decode(slv.get_model(), g, i)
+                        print(f"{mx}")
                 else:
                     if verbose:
                         print(f"Failed {i}")
                         print(f"Finished cycle in {time.time() - start}")
+                        sys.stdout.flush()
                     break
 
                 if verbose:
                     print(f"Finished cycle in {time.time() - start}")
+                sys.stdout.flush()
 
         for v in self.totalizer.values():
             for t in v.values():
@@ -165,7 +194,7 @@ class TwinWidthEncoding:
     def get_card_vars(self, d):
         vars = []
         for v in self.totalizer.values():
-            vars.extend([-x.rhs[d] for x in v.values()])
+            vars.extend([-x.rhs[d] for x in v.values() if d < len(x.rhs)])
 
         return vars
 
@@ -182,7 +211,8 @@ class TwinWidthEncoding:
                     if k == j or i == k:
                         continue
 
-                    formula.append([-self.tord(k, i), -self.tord(k, j), -self.tedge(k, i, j), c_aux])
+                    if j in self.edge[k][i]:
+                        formula.append([-self.ord[k][i], -self.ord[k][j], -self.edge[k][i][j], c_aux])
 
         # Maintain red arcs
         for i in range(1, len(g.nodes) + 1):
@@ -198,8 +228,9 @@ class TwinWidthEncoding:
                         if i == m or j == m:
                             continue
 
-                        formula.append([-self.tord(i, j), -self.tord(j, k), -self.tord(j, m), -self.tedge(i, k, m),
-                                         self.tedge(j, k, m)])
+                        if m in self.edge[j][k]:
+                            formula.append([-self.ord[i][j], -self.ord[j][k], -self.ord[j][m], -self.edge[i][k][m],
+                                             self.edge[j][k][m]])
 
         # Transfer red arcs
         for i in range(1, len(g.nodes) + 1):
@@ -211,11 +242,12 @@ class TwinWidthEncoding:
                     if k == i or k == j:
                         continue
 
-                    if i < k:
-                        # We can make this ternary by doubling the aux vars and implying i < k that way
-                        formula.append([-self.merge[i][j], -self.tord(i, k), -auxes[i][k], self.tedge(i, j, k)])
-                    else:
-                        formula.append([-self.merge[i][j], -self.tord(i, k), -auxes[k][i], self.tedge(i, j, k)])
+                    if j in self.merge[i] and k in self.edge[i][j]:
+                        if i < k:
+                            # We can make this ternary by doubling the aux vars and implying i < k that way
+                            formula.append([-self.merge[i][j], -self.ord[i][k], -auxes[i][k], self.edge[i][j][k]])
+                        else:
+                            formula.append([-self.merge[i][j], -self.ord[i][k], -auxes[k][i], self.edge[i][j][k]])
 
     def sb_ord(self, n, formula):
         for i in range(1, n):
@@ -228,8 +260,8 @@ class TwinWidthEncoding:
 
         for i in range(1, n+1):
             for j in range(i+1, n+1):
-                formula.append([-self.tord(i, j), -smallest[j]])
-                formula.append([-self.tord(j, i), -smallest[i]])
+                formula.append([-self.ord[i][j], -smallest[j]])
+                formula.append([-self.ord[j][i], -smallest[i]])
 
         import math
         width = math.sqrt(n) // 2
@@ -256,11 +288,14 @@ class TwinWidthEncoding:
 
         for i in range(1, len(g.nodes) + 1):
             for j in range(i+1, len(g.nodes) + 1):
-                if model[self.merge[i][j]]:
-                    if i in mg:
-                        print("Error, double merge!")
-                    mg[i] = j
-
+                if j in self.merge[i]:
+                    if model[self.merge[i][j]]:
+                        if i in mg:
+                            print("Error, double merge!")
+                        mg[i] = j
+        mg[self.partition_sep] = len(g.nodes)
+        # for c_i in range(self.partition_sep, len(g.nodes)):
+        #     mg[c_i] = len(g.nodes)
         od.sort(key=cmp_to_key(find_ord))
 
         # Perform contractions, last node needs not be contracted...
@@ -284,22 +319,40 @@ class TwinWidthEncoding:
             # with open(f"line_{cnt}.png", "w") as f:
             #     subprocess.run(["dot", "-Tpng", f"line_{cnt}.dot"], stdout=f)
 
+            tns = set(g.successors(t))
+            tnp = set(g.predecessors(t))
+            nns = set(g.successors(n))
+            nnp = set(g.predecessors(n))
 
-            tn = set(g.neighbors(t))
-            tn.discard(n)
-            nn = set(g.neighbors(n))
+            nn = nns | nnp
+            tn = tns | tnp
 
             for v in nn:
                 if v != t:
                     # Red remains, should edge exist
-                    if v in tn and g[n][v]['red']:
-                        g[t][v]['red'] = True
-                    # Add non-existing edges
-                    if v not in tn:
-                        g.add_edge(t, v, red=True)
+                    if (v in g[n] and g[n][v]['red']) or v not in tn or (v in nns and v not in tns) or (v in nnp and v not in tnp):
+                        if g.has_edge(t, v):
+                            g[t][v]['red'] = True
+                        else:
+                            g.add_edge(t, v, red=True)
+
+                        if g.has_edge(v, t):
+                            g[v][t]['red'] = True
+                        else:
+                            g.add_edge(v, t, red=True)
+
             for v in tn:
                 if v not in nn:
-                    g[t][v]['red'] = True
+                    if g.has_edge(t, v):
+                        g[t][v]['red'] = True
+                    else:
+                        g.add_edge(t, v, red=True)
+
+                    if g.has_edge(v, t):
+                        g[v][t]['red'] = True
+                    else:
+                        g.add_edge(v, t, red=True)
+
             g.remove_node(n)
 
             # Count reds...
@@ -327,5 +380,5 @@ class TwinWidthEncoding:
                 diff.discard(j)
 
                 if len(diff) > ub:
-                    lits = [self.tord(x, i) for x in diff]
+                    lits = [self.ord[x][i] for x in diff]
                     formula.append([-self.merge[i][j], *lits])
