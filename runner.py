@@ -84,19 +84,37 @@ if output_graphs:
         if n is None:
             break
 
-        tn = set(g.neighbors(t))
-        tn.discard(n)
-        nn = set(g.neighbors(n))
+        tns = set(g.successors(t))
+        tnp = set(g.predecessors(t))
+        nns = set(g.successors(n))
+        nnp = set(g.predecessors(n))
+
+        nn = nns | nnp
+        tn = tns | tnp
 
         for v in nn:
             if v != t:
                 # Red remains, should edge exist
-                if v in tn and g[n][v]['red']:
-                    g[t][v]['red'] = True
-                # Add non-existing edges
-                if v not in tn:
-                    g.add_edge(t, v, red=True)
+                if (v in g[n] and g[n][v]['red']) or v not in tn or (v in nns and v not in tns) or (
+                        v in nnp and v not in tnp):
+                    if g.has_edge(t, v):
+                        g[t][v]['red'] = True
+                    elif g.has_edge(v, t):
+                        g[v][t]['red'] = True
+                    else:
+                        g.add_edge(t, v, red=True)
+
         for v in tn:
             if v not in nn:
-                g[t][v]['red'] = True
-        g.remove_node(n)
+                if g.has_edge(t, v):
+                    g[t][v]['red'] = True
+                elif g.has_edge(v, t):
+                    g[v][t]['red'] = True
+                else:
+                    g.add_edge(v, t, red=True)
+
+        for u in list(g.successors(n)):
+            g.remove_edge(n, u)
+        for u in list(g.predecessors(n)):
+            g.remove_edge(u, n)
+        g.nodes[n]["del"] = True
