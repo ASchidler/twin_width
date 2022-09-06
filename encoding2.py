@@ -196,7 +196,7 @@ class TwinWidthEncoding2:
         self.encode_merge(n, d)
         self.encode_red(n, d)
         self.encode_counters(g, d)
-        self.skip_doublehops(n, d)
+        #self.skip_doublehops(n, d)
         #print(f"{len(self.formula.clauses)}")
 
         #self.break_symmetry(n, d)
