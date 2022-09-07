@@ -10,6 +10,7 @@ import pysat.solvers as slv
 import encoding as encoding
 import encoding2
 import encoding5 as other
+import encoding6 as other2
 import encoding_signed_bipartite
 import heuristic
 import parser
@@ -42,8 +43,8 @@ if instance.endswith(".cnf"):
         enc = encoding_signed_bipartite.TwinWidthEncoding()
         cb = enc.run(g, slv.Cadical, ub)
 else:
-    # g = parser.parse(instance)[0]
-    g = tools.prime_paley(29)
+    g = parser.parse(instance)[0]
+    # g = tools.prime_paley(29)
 
     print(f"{len(g.nodes)} {len(g.edges)}")
     preprocessing.twin_merge(g)
@@ -59,9 +60,10 @@ else:
     ub = min(ub, ub2)
 
     start = time.time()
-    # enc = encoding.TwinWidthEncoding()
-    enc = other.TwinWidthEncoding2(g)
-    #enc = encoding2.TwinWidthEncoding2(g)
+    enc = encoding.TwinWidthEncoding()
+    # enc = other.TwinWidthEncoding2(g)
+    # enc = other2.TwinWidthEncoding()
+    # enc = encoding2.TwinWidthEncoding2(g)
 
     cb = enc.run(g, slv.Cadical, ub)
 

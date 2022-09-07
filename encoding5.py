@@ -40,7 +40,7 @@ class TwinWidthEncoding2:
         self.red = [[{} for _ in range(0, len(g.nodes) + 1)] for _ in range(0, len(g.nodes) + 1)]
         self.ord = [{} for _ in range(0, len(g.nodes) + 1)]
         self.merge = [{} for _ in range(0, len(g.nodes) + 1)]
-        self.merged = [{} for  _ in range(0, len(g.nodes) + 1)]
+        self.merged = [{} for _ in range(0, len(g.nodes) + 1)]
 
         for i in range(1, len(g.nodes)+1):
             for j in range(i+1, len(g.nodes)+1):
@@ -97,8 +97,6 @@ class TwinWidthEncoding2:
         else:
             return self.red[t][j][i]
 
-    # TODO: Could explicitly remove all red arcs after merge
-
     def encode_red(self, n, d, g):
         for i in range(1, n + 1):
             inb = set(g.neighbors(i))
@@ -113,6 +111,8 @@ class TwinWidthEncoding2:
                     for k in diff:
                         self.formula.append(
                             [-self.ord[t - 1][i], -self.merge[i][j], self.merged[k][t-1], self.tred(t-1, j, k)])
+                        # self.formula.append(
+                        #     [-self.merged[i][t-1], -self.merge[i][j], self.merged[j][t-1], self.merged[k][t - 1], self.tred(t - 1, j, k)])
 
                     # Transfer from merge source to merge target
                     for k in range(1, n + 1):

@@ -16,6 +16,7 @@ class TwinWidthEncoding:
         self.node_map = None
         self.pool = IDPool()
         self.totalizer = None
+        self.merged = None
 
     def remap_graph(self, g):
         self.node_map = {}
@@ -38,6 +39,7 @@ class TwinWidthEncoding:
         self.edge = [[{} for _ in range(0, len(g.nodes) + 1)]  for _ in range(0, len(g.nodes) + 1)]
         self.ord = [{} for _ in range(0, len(g.nodes) + 1)]
         self.merge = [{} for _ in range(0, len(g.nodes) + 1)]
+        self.merged = [{} for _ in range(0, len(g.nodes) + 1)]
 
         for i in range(1, len(g.nodes) + 1):
             for j in range(i + 1, len(g.nodes) + 1):
@@ -45,6 +47,32 @@ class TwinWidthEncoding:
                     self.edge[k][i][j] = self.pool.id(f"edge{k}_{i}_{j}")
                 self.ord[i][j] = self.pool.id(f"ord{i}_{j}")
                 self.merge[i][j] = self.pool.id(f"merge{i}_{j}")
+
+        for t in range(1, len(g.nodes) + 1):
+            for i in range(1, len(g.nodes) + 1):
+                self.merged[i][t] = self.pool.id(f"merged{i}_{t}")
+
+    def encode_merged(self, n, formula):
+        for i in range(1, n + 1):
+            formula.append([self.merged[i][n]])
+
+        for t in range(1, n + 1):
+            for i in range(1, n + 1):
+                helper_clause = [self.merged[i][t]]
+                for j in range(1, n + 1):
+                    if i == j:
+                        continue
+                    if t > 1:
+                        formula.append([-self.merged[i][t], self.tord(i, j), self.merged[j][t-1]])
+                        formula.append([-self.merged[j][t - 1], self.pool.id(f"mh_{i}_{j}_{t}")])
+                        formula.append([-self.tord(i, j), self.pool.id(f"mh_{i}_{j}_{t}")])
+                        helper_clause.append(-self.pool.id(f"mh_{i}_{j}_{t}"))
+                    else:
+                        helper_clause.append(-self.tord(i, j))
+                        formula.append([-self.merged[i][1], self.tord(i, j)])
+                    formula.append([-self.tord(i, j), -self.merged[j][t], self.merged[i][t]])
+
+                formula.append(helper_clause)
 
     def tord(self, i, j):
         if i < j:
@@ -95,11 +123,13 @@ class TwinWidthEncoding:
                 diff = jnb ^ inb  # Symmetric difference
                 diff.discard(j)
 
-                for k in diff:
-                    # TODO: On dense graphs one could use the complementary graph...
-                    formula.append([-self.merge[i][j], -self.tord(i, k), self.tedge(i, j, k)])
+                for t in range(1, len(g.nodes) + 1):
+                    for k in diff:
+                        # TODO: On dense graphs one could use the complementary graph...
+                        formula.append([-self.merge[i][j], -self.merged[i][t], self.merged[k][t], self.merged[j][t], self.tedge(t, j, k)])
 
         self.encode_reds2(g, formula)
+        self.encode_merged(len(g.nodes), formula)
 
         # Encode counters
         self.totalizer = {}
@@ -112,7 +142,6 @@ class TwinWidthEncoding:
                 self.pool.occupy(self.pool.top-1, self.totalizer[i][x].top_id)
 
         self.sb_ord(n, formula)
-        self.sb_reds(n, formula)
         return formula
 
     def run(self, g, solver, start_bound, verbose=True, check=True, lb=0):
@@ -161,71 +190,50 @@ class TwinWidthEncoding:
         return vars
 
     def encode_reds2(self, g, formula):
-        auxes = {}
         for i in range(1, len(g.nodes) + 1):
-            auxes[i] = {}
             for j in range(i+1, len(g.nodes) + 1):
-                if j == i:
-                    continue
-                c_aux = self.pool.id(f"a_red{i}_{j}")
-                auxes[i][j] = c_aux
-                for k in range(1, len(g.nodes) + 1):
-                    if k == j or i == k:
-                        continue
+                formula.append([-self.merge[i][j], self.pool.id(f"is_target{j}")])
 
-                    # formula.append([-self.tord(k, i), -self.tord(k, j), -self.tedge(k, i, j), c_aux])
-                    formula.append([-self.tedge(k, i, j), c_aux])
+        for i in range(1, len(g.nodes) + 1):
+            helpers = [-self.pool.id(f"is_target{i}")]
+            for j in range(1, i):
+                helpers.append(self.merged[j][i])
+            formula.append(helpers)
 
         # Maintain red arcs
-        for i in range(1, len(g.nodes) + 1):
-            for j in range(1, len(g.nodes) + 1):
-                if i == j:
-                    continue
-
-                for k in range(1, len(g.nodes) + 1):
-                    if j == k or i == k:
+        for t in range(1, len(g.nodes) + 1):
+            for i in range(1, len(g.nodes) + 1):
+                for j in range(1, len(g.nodes) + 1):
+                    if i == j:
                         continue
+                    if t < len(g.nodes):
+                        formula.append([-self.tedge(t, i, j), self.merged[i][t+1], self.merged[j][t+1], self.tedge(t+1, i, j)])
 
-                    for m in range(k + 1, len(g.nodes) + 1):
-                        if i == m or j == m:
-                            continue
-
-                        formula.append([-self.tord(i, j), -self.tord(j, k), -self.tord(j, m), -self.tedge(i, k, m),
-                                         self.tedge(j, k, m)])
-
-                        # formula.append([-self.merge[k][m], -self.tord(k, i), -self.tedge(j, k, i), self.tedge(k, m, i)])
-
-        # Transfer red arcs
-        for i in range(1, len(g.nodes) + 1):
-            for j in range(i + 1, len(g.nodes) + 1):
-                if i == j:
-                    continue
-
-                for k in range(1, len(g.nodes) + 1):
-                    if k == i or k == j:
-                        continue
-
-                    if i < k:
-                        # We can make this ternary by doubling the aux vars and implying i < k that way
-                        formula.append([-self.merge[i][j], -self.tord(i, k), -auxes[i][k], self.tedge(i, j, k)])
-                    else:
-                        formula.append([-self.merge[i][j], -self.tord(i, k), -auxes[k][i], self.tedge(i, j, k)])
-
-    def sb_reds(self, n, formula):
-        for i in range(1, n + 1):
-            for j in range(i + 1, n + 1):
-                if i == j:
-                    continue
-
-                for k in range(1, n + 1):
-                    if k == i or k == j:
-                        continue
-
-                    formula.append([-self.tord(j, i), -self.tedge(i, j, k)])
+                    if i < j and t > 1:
+                        for k in range(1, len(g.nodes) + 1):
+                            if k == i or k == j:
+                                continue
+                            formula.append([-self.pool.id(f"is_target{j}"), -self.merge[i][j], -self.merged[i][t], self.merged[j][t], self.merged[k][t], -self.tedge(t-1, i, k), self.tedge(t, j, k)])
 
     def sb_ord(self, n, formula):
         for i in range(1, n):
             formula.append([self.ord[i][n]])
+            # TODO: Can we do the same for the second to last?
+
+    def sb_grid(self, g, n, formula):
+        smallest = {x: self.pool.id(f"smallest{x}") for x in range(1, n+1)}
+        formula.extend(CardEnc.atmost(smallest.values()))
+
+        for i in range(1, n+1):
+            for j in range(i+1, n+1):
+                formula.append([-self.tord(i, j), -smallest[j]])
+                formula.append([-self.tord(j, i), -smallest[i]])
+
+        import math
+        width = math.sqrt(n) // 2
+
+        quadrant = [z for (x, y), z in self.node_map.items() if y <= width and z <= width]
+        formula.append([smallest[i] for i in quadrant])
 
     def decode(self, model, g, d, verbose=False):
         g = g.copy()
@@ -259,7 +267,12 @@ class TwinWidthEncoding:
 
         c_max = 0
         cnt = 0
-        for n in od[:-1]:
+        for i, n in enumerate(od[:-1]):
+            if not model[self.merged[n][i+1]]:
+                print("Merge mismatch")
+            for n2 in od[i+1:]:
+                if model[self.merged[n2][i+1]]:
+                    print("Unmerged mismatch")
             t = unmap[mg[n]]
             n = unmap[n]
             if verbose:
@@ -299,11 +312,25 @@ class TwinWidthEncoding:
                 for v in g.neighbors(u):
                     if g[u][v]['red']:
                         cc += 1
+
                 c_max = max(c_max, cc)
             cnt += 1
         #print(f"Done {c_max}/{d}")
         od = [unmap[x] for x in od]
         mg = {unmap[x]: unmap[y] for x, y in mg.items()}
-        if c_max > d:
-            print(f"Error: Bound exceeded {c_max}/{d}")
         return c_max, od, mg
+
+    def sb_sth(self, g, formula, ub):
+        n = len(g.nodes)
+
+        for i in range(1, len(g.nodes) + 1):
+            inb = set(g.neighbors(i))
+            for j in range(i+1, len(g.nodes) + 1):
+                jnb = set(g.neighbors(j))
+                jnb.discard(i)
+                diff = jnb ^ inb  # Symmetric difference
+                diff.discard(j)
+
+                if len(diff) > ub:
+                    lits = [self.tord(x, i) for x in diff]
+                    formula.append([-self.merge[i][j], *lits])
