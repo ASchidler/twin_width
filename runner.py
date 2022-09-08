@@ -1,3 +1,5 @@
+import os
+import subprocess
 import sys
 import time
 from threading import Timer
@@ -24,13 +26,18 @@ resource.setrlimit(resource.RLIMIT_AS, (16 * 1024 * 1024 * 1024, 16 * 1024 * 102
 instance = sys.argv[-1]
 print(instance)
 
+output_graphs = False
+if any(x == "-l" for x in sys.argv[1:-1]):
+    output_graphs = True
+
 if instance.endswith(".cnf"):
     g = parser.parse_cnf(instance)
     ub = heuristic.get_ub2_polarity(g)
     print(f"UB {ub}")
 
     start = time.time()
-    if len(sys.argv) > 2:
+
+    if len(sys.argv) > 2 and not output_graphs:
         cb = treewidth.solve(g.to_undirected(), len(g.nodes) - 1, slv.Glucose3, True)[1]
     else:
         enc = encoding_signed_bipartite.TwinWidthEncoding()
@@ -59,3 +66,59 @@ else:
 
 print(f"Finished, result: {cb}")
 
+if output_graphs:
+    instance_name = os.path.split(instance)[-1]
+    mg = cb[2]
+    for u, v in g.edges:
+        g[u][v]["red"] = False
+
+    for i, n in enumerate(cb[1]):
+        if n not in mg:
+            t = None
+            n = None
+        else:
+            t = mg[n]
+        with open(f"{instance_name}_{i}.dot", "w") as f:
+            f.write(tools.dot_export(g, n, t, True))
+        with open(f"{instance_name}_{i}.png", "w") as f:
+            subprocess.run(["dot", "-Tpng", f"{instance_name}_{i}.dot"], stdout=f)
+
+        if n is None:
+            break
+
+        tns = set(g.successors(t))
+        tnp = set(g.predecessors(t))
+        nns = set(g.successors(n))
+        nnp = set(g.predecessors(n))
+
+        nn = nns | nnp
+        tn = tns | tnp
+
+        for v in nn:
+            if v != t:
+                # Red remains, should edge exist
+                if (v in g[n] and g[n][v]['red']) or v not in tn or (v in nns and v not in tns) or (
+                        v in nnp and v not in tnp):
+                    if g.has_edge(t, v):
+                        g[t][v]['red'] = True
+                    else:
+                        g.add_edge(t, v, red=True)
+
+                    if g.has_edge(v, t):
+                        g[v][t]['red'] = True
+                    else:
+                        g.add_edge(v, t, red=True)
+
+        for v in tn:
+            if v not in nn:
+                if g.has_edge(t, v):
+                    g[t][v]['red'] = True
+                else:
+                    g.add_edge(t, v, red=True)
+
+                if g.has_edge(v, t):
+                    g[v][t]['red'] = True
+                else:
+                    g.add_edge(v, t, red=True)
+
+        g.remove_node(n)

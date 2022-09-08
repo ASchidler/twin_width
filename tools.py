@@ -39,24 +39,58 @@ def amo_commander(vars, vpool, m=2):
     return formula
 
 
-def dot_export(g, u, v):
+def dot_export(g, u, v, is_sat=False):
     def cln(name):
         return f"{name}".replace("(", "").replace(")", "").replace(",", "").replace(" ", "_")
 
-    output1 = "strict graph dt {" + os.linesep
+    output1 = "strict graph dt {rankdir=TB;overlap=false;" + os.linesep
 
-    for n in g.nodes:
-        cl = 'green' if n == u or n == v else 'black'
-        posstr = ""
-        if isinstance(n, tuple) and len(n) == 2:
-            posstr = f', pos="{n[0]},{n[1]}!"'
-        output1 += f"n{cln(n)} [" \
-                   f"shape=box, fontsize=11,width=0.3,height=0.2,fixedsize=true,style=filled,fontcolor=white," \
-                   f"color={cl}, fillcolor={cl}{posstr}];{os.linesep}"
+    if not is_sat:
+        for n in g.nodes:
+            cl = 'green' if n == u or n == v else 'black'
+            posstr = ""
+            if isinstance(n, tuple) and len(n) == 2:
+                posstr = f', pos="{n[0]},{n[1]}!"'
+            output1 += f"n{cln(n)} [" \
+                       f"shape=box, fontsize=11,width=0.3,height=0.2,fixedsize=true,style=filled,fontcolor=white," \
+                       f"color={cl}, fillcolor={cl}{posstr}];{os.linesep}"
+    else:
+        output1 += "subgraph cluster_clauses {" + os.linesep
+        #output1 += "left[pos = \"-1,0!\", color = red]" + os.linesep
+        for n in g.nodes:
+            if n.startswith("c"):
+                cl = 'blue' if n == u or n == v else 'white'
+                cl2 = 'blue' if n == u or n == v else 'black'
+                posstr = ""
+                if isinstance(n, tuple) and len(n) == 2:
+                    posstr = f', pos="{n[0]},{n[1]}!"'
+                output1 += f"n{cln(n)} [" \
+                           f"shape=circle, fontsize=0,width=0.2,height=0.2,fixedsize=true,style=filled,fontcolor=white," \
+                           f"color={cl2}, fillcolor={cl}{posstr}];{os.linesep}"
+                #output1 += f"n{cln(n)} -- left;" + os.linesep
+        output1 += "}" + os.linesep
+
+        output1 += "subgraph cluster_vars {" + os.linesep
+        #output1 += "right[pos = \"1,0!\", color = red]" + os.linesep
+        for n in g.nodes:
+            if n.startswith("v"):
+                cl = 'blue' if n == u or n == v else 'white'
+                cl2 = 'blue' if n == u or n == v else 'black'
+                posstr = ""
+                if isinstance(n, tuple) and len(n) == 2:
+                    posstr = f', pos="{n[0]},{n[1]}!"'
+                output1 += f"n{cln(n)} [" \
+                           f"shape=circle, fontsize=0,width=0.2,height=0.2,fixedsize=true,style=filled,fontcolor=white," \
+                           f"color={cl2}, fillcolor={cl}{posstr}];{os.linesep}"
+                #output1 += f"n{cln(n)} -- right[color=black];" + os.linesep
+        output1 += "}" + os.linesep
 
     for x, y in g.edges:
         cl = 'red' if 'red' in g[x][y] and g[x][y]['red'] else 'black'
-        output1 += f"n{cln(x)} -- n{cln(y)} [color={cl}];{os.linesep}"
+        if is_sat:
+            output1 += f"n{cln(x)} -- n{cln(y)} [color={cl},label=\"{'-' if cln(x).startswith('v') else '+'}\"];{os.linesep}"
+        else:
+            output1 += f"n{cln(x)} -- n{cln(y)} [color={cl}];{os.linesep}"
 
     # # Draw the linegraph
     # output2 = "strict graph dt {" + os.linesep
