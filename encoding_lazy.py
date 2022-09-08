@@ -16,6 +16,8 @@ class TwinWidthEncoding:
         self.node_map = None
         self.pool = IDPool()
         self.totalizer = None
+        self.permanent_edges = None
+        self.permanent_tot = None
 
     def remap_graph(self, g):
         self.node_map = {}
@@ -38,13 +40,18 @@ class TwinWidthEncoding:
         self.edge = [[{} for _ in range(0, len(g.nodes) + 1)]  for _ in range(0, len(g.nodes) + 1)]
         self.ord = [{} for _ in range(0, len(g.nodes) + 1)]
         self.merge = [{} for _ in range(0, len(g.nodes) + 1)]
+        self.permanent_edges = [{} for _ in range(0, len(g.nodes) + 1)]
+        self.totalizer = {}
 
         for i in range(1, len(g.nodes) + 1):
             for j in range(i + 1, len(g.nodes) + 1):
-                for k in range(1, len(g.nodes) + 1):
-                    self.edge[k][i][j] = self.pool.id(f"edge{k}_{i}_{j}")
                 self.ord[i][j] = self.pool.id(f"ord{i}_{j}")
                 self.merge[i][j] = self.pool.id(f"merge{i}_{j}")
+
+        for i in range(1, len(g.nodes) + 1):
+            for j in range(1, len(g.nodes) + 1):
+                if i != j:
+                    self.permanent_edges[i][j] = self.pool.id(f"pe{i}_{j}")
 
     def tord(self, i, j):
         if i < j:
@@ -53,19 +60,15 @@ class TwinWidthEncoding:
         return -self.ord[j][i]
 
     def tedge(self, n, i, j):
-        if i < j:
-            return self.edge[n][i][j]
+        i, j = min(i, j), max(i, j)
+        if j not in self.edge[n][i]:
+            self.edge[n][i][j] = self.pool.id(f"edge{n}_{i}_{j}")
 
-        return self.edge[n][j][i]
-
-    # def tmerge(self, i, j):
-    #     if i < j:
-    #         return self.merge[i][j]
-    # 
-    #     return self.merge[j][i]
+        return self.edge[n][i][j]
 
     def encode(self, g, d):
         g = self.remap_graph(g)
+        self.remapped_g = g
         n = len(g.nodes)
         self.init_var(g)
         formula = CNF()
@@ -88,7 +91,7 @@ class TwinWidthEncoding:
                 formula.append([-self.merge[i][j], self.tord(i, j)])
                 
         # single merge target
-        for i in range(1, len(g.nodes) + 1):
+        for i in range(1, len(g.nodes)):
             formula.extend(CardEnc.atleast([self.merge[i][j] for j in range(i + 1, len(g.nodes) + 1)], bound=1, vpool=self.pool))
             formula.extend(tools.amo_commander([self.merge[i][j] for j in range(i + 1, len(g.nodes) + 1)], self.pool))
 
@@ -103,83 +106,58 @@ class TwinWidthEncoding:
 
                 for k in diff:
                     # TODO: On dense graphs one could use the complementary graph...
+                    formula.append([-self.merge[i][j], -self.tord(i, k), -self.tord(j, k), self.permanent_edges[j][k]])
+                    formula.append([-self.merge[i][j], -self.tord(i, k), -self.tord(k, j), self.permanent_edges[k][j]])
                     formula.append([-self.merge[i][j], -self.tord(i, k), self.tedge(i, j, k)])
 
-        self.encode_reds2(g, formula)
-        #self.perf(n, formula)
+                for k in range(1, len(g.nodes) + 1):
+                    if k == i or k == j:
+                        continue
 
-        # Encode counters
-        # self.totalizer = {}
-        # for i in range(1, len(g.nodes)): # As last one is the root, no counter needed
-        #     self.totalizer[i] = {}
-        #     for x in range(1, len(g.nodes) + 1):
-        #         vars = [self.tedge(i, x, y) for y in range(1, len(g.nodes)+1) if x != y]
-        #         self.totalizer[i][x] = ITotalizer(vars, ubound=d, top_id=self.pool.id(f"totalizer{i}_{x}"))
-        #         formula.extend(self.totalizer[i][x].cnf)
-        #         self.pool.occupy(self.pool.top-1, self.totalizer[i][x].top_id)
-        import new_counter
+                    formula.append(
+                        [-self.merge[i][j], -self.tord(i, k), -self.permanent_edges[i][k], -self.tord(j, k),
+                         self.permanent_edges[j][k]])
+                    formula.append(
+                        [-self.merge[i][j], -self.tord(i, k), -self.permanent_edges[i][k], -self.tord(k, j),
+                         self.permanent_edges[k][j]])
+
+        self.permanent_tot = {}
         for i in range(1, len(g.nodes)): # As last one is the root, no counter needed
-            for x in range(1, len(g.nodes) + 1):
-                vars = [self.tedge(i, x, y) for y in range(1, len(g.nodes)+1) if x != y]
-                for c_c in new_counter.add_adder(vars, self.pool, upto=d):
-                    formula.append(c_c)
-                #self.totalizer[i][x] = ITotalizer(vars, ubound=d, top_id=self.pool.id(f"totalizer{i}_{x}"))
-                #formula.extend(self.totalizer[i][x].cnf)
-                #self.pool.occupy(self.pool.top-1, self.totalizer[i][x].top_id)
+            vars = [self.permanent_edges[i][j] for j in range(1, len(g.nodes)+1) if i != j]
+            self.permanent_tot[i] = ITotalizer(vars, ubound=d, top_id=self.pool.id(f"perm_totalizer{i}"))
+            formula.extend(self.permanent_tot[i].cnf)
+            self.pool.occupy(self.pool.top-1, self.permanent_tot[i].top_id)
 
-        #self.sb_grid(g, n, formula)
         self.sb_ord(n, formula)
-        #self.sb_sth(g, formula, d)
-        #print(f"{len(formula.clauses)} / {formula.nv}")
+        self.sb_reds(n, formula)
         return formula
 
     def run(self, g, solver, start_bound, verbose=True, check=True, lb=0):
         start = time.time()
-        # formula = self.encode(g, start_bound)
-        # cb = start_bound
-        #
-        # if verbose:
-        #     print(f"Created encoding in {time.time() - start}")
-        # od = None
-        # mg = None
-        # with solver() as slv:
-        #     slv.append_formula(formula)
-        #     for i in range(start_bound, lb-1, -1):
-        #         if verbose:
-        #             print(f"{slv.nof_clauses()}/{slv.nof_vars()}")
-        #         if slv.solve(assumptions=self.get_card_vars(i)):
-        #             cb = i
-        #             if verbose:
-        #                 print(f"Found {i}")
-        #             if check:
-        #                 mx, od, mg = self.decode(slv.get_model(), g, i)
-        #         else:
-        #             if verbose:
-        #                 print(f"Failed {i}")
-        #                 print(f"Finished cycle in {time.time() - start}")
-        #             break
-        #
-        #         if verbose:
-        #             print(f"Finished cycle in {time.time() - start}")
-
+        formula = self.encode(g, start_bound)
         cb = start_bound
 
         if verbose:
             print(f"Created encoding in {time.time() - start}")
         od = None
         mg = None
-        for i in range(start_bound, lb-1, -1):
-            with solver() as slv:
-                formula = self.encode(g, cb)
-                slv.append_formula(formula)
+        with solver() as slv:
+            slv.append_formula(formula)
+
+            i = start_bound
+            while i >= lb:
                 if verbose:
                     print(f"{slv.nof_clauses()}/{slv.nof_vars()}")
-                if slv.solve():
+                if slv.solve(assumptions=self.get_card_vars(i)):
                     cb = i
-                    if verbose:
-                        print(f"Found {i}")
-                    if check:
-                        mx, od, mg = self.decode(slv.get_model(), g, i)
+
+                    ret = self.decode(slv.get_model(), g, i, slv, verbose)
+                    if ret != False:
+                        if verbose:
+                            print(f"Found {i}")
+                        i -= 1
+                        mx, od, mg = ret
+
                 else:
                     if verbose:
                         print(f"Failed {i}")
@@ -192,6 +170,8 @@ class TwinWidthEncoding:
         for v in self.totalizer.values():
             for t in v.values():
                 t.delete()
+        for v in self.permanent_tot.values():
+            v.delete()
 
         if od is None:
             return cb
@@ -203,77 +183,79 @@ class TwinWidthEncoding:
         for v in self.totalizer.values():
             vars.extend([-x.rhs[d] for x in v.values()])
 
+        for v in self.permanent_tot.values():
+            vars.append(-v.rhs[d])
+
         return vars
 
-    def encode_reds2(self, g, formula):
-        auxes = {}
-        for i in range(1, len(g.nodes) + 1):
-            auxes[i] = {}
-            for j in range(i+1, len(g.nodes) + 1):
-                if j == i:
+    def encode_propagation(self, v, g, d, solver):
+        for j in range(1, v):
+            # Transfer red arcs
+            for k in range(1, len(g.nodes) + 1):
+                if k == v or k == j:
                     continue
-                c_aux = self.pool.id(f"a_red{i}_{j}")
-                auxes[i][j] = c_aux
-                for k in range(1, len(g.nodes) + 1):
-                    if k == j or i == k:
-                        continue
 
-                    formula.append([-self.tord(k, i), -self.tord(k, j), -self.tedge(k, i, j), c_aux])
+                solver.add_clause(
+                    [-self.merge[j][v], -self.tord(j, k), -self.permanent_edges[j][k], self.tedge(j, v, k)])
+
+        for j in range(1, len(g.nodes) + 1):
+            if j == v:
+                continue
+
+            # Transfer red arcs
+            for k in range(j+1, len(g.nodes) + 1):
+                if k == v or k == j:
+                    continue
+
+                if k not in self.totalizer:
+                    solver.add_clause([-self.merge[j][k], -self.tord(j, v), -self.permanent_edges[j][v], self.tedge(j, v, k)])
 
         # Maintain red arcs
-        for i in range(1, len(g.nodes) + 1):
-            for j in range(1, len(g.nodes) + 1):
-                if i == j:
+        for j in range(1, len(g.nodes) + 1):
+            if v == j:
+                continue
+
+            for k in range(1, len(g.nodes) + 1):
+                if j == k or v == k:
                     continue
 
-                for k in range(1, len(g.nodes) + 1):
-                    if j == k or i == k:
+                for m in range(1, len(g.nodes) + 1):
+                    if v == m or j == m or k == m:
                         continue
 
-                    for m in range(k + 1, len(g.nodes) + 1):
-                        if i == m or j == m:
-                            continue
+                    if m not in self.totalizer:
+                        solver.add_clause(
+                            [-self.tord(k, v), -self.tord(j, k), -self.tord(k, m), -self.tedge(j, v, m),
+                             self.tedge(k, v, m)])
 
-                        formula.append([-self.tord(i, j), -self.tord(j, k), -self.tord(j, m), -self.tedge(i, k, m),
-                                         self.tedge(j, k, m)])
+        # Encode counters
+        self.totalizer[v] = {}
+        for x in range(1, len(g.nodes) + 1):
+            if x == v:
+                continue
+            vars = [self.tedge(x, v, y) for y in range(1, len(g.nodes)+1) if v != y]
+            self.totalizer[v][x] = ITotalizer(vars, ubound=d, top_id=self.pool.id(f"totalizer{v}_{x}"))
+            solver.append_formula(self.totalizer[v][x].cnf)
+            solver.add_clause([-self.totalizer[v][x].rhs[d]])
+            self.pool.occupy(self.pool.top-1, self.totalizer[v][x].top_id)
 
-        # Transfer red arcs
-        for i in range(1, len(g.nodes) + 1):
-            for j in range(i + 1, len(g.nodes) + 1):
+    def sb_reds(self, n, formula):
+        for i in range(1, n + 1):
+            for j in range(i + 1, n + 1):
                 if i == j:
                     continue
 
-                for k in range(1, len(g.nodes) + 1):
+                for k in range(1, n + 1):
                     if k == i or k == j:
                         continue
 
-                    if i < k:
-                        # We can make this ternary by doubling the aux vars and implying i < k that way
-                        formula.append([-self.merge[i][j], -self.tord(i, k), -auxes[i][k], self.tedge(i, j, k)])
-                    else:
-                        formula.append([-self.merge[i][j], -self.tord(i, k), -auxes[k][i], self.tedge(i, j, k)])
+                    formula.append([-self.tord(j, i), -self.tedge(i, j, k)])
 
     def sb_ord(self, n, formula):
         for i in range(1, n):
             formula.append([self.ord[i][n]])
-            # TODO: Can we do the same for the second to last?
 
-    def sb_grid(self, g, n, formula):
-        smallest = {x: self.pool.id(f"smallest{x}") for x in range(1, n+1)}
-        formula.extend(CardEnc.atmost(smallest.values()))
-
-        for i in range(1, n+1):
-            for j in range(i+1, n+1):
-                formula.append([-self.tord(i, j), -smallest[j]])
-                formula.append([-self.tord(j, i), -smallest[i]])
-
-        import math
-        width = math.sqrt(n) // 2
-
-        quadrant = [z for (x, y), z in self.node_map.items() if y <= width and z <= width]
-        formula.append([smallest[i] for i in quadrant])
-
-    def decode(self, model, g, d):
+    def decode(self, model, g, d, solver, verbose=False):
         g = g.copy()
         model = {abs(x): x > 0 for x in model}
         unmap = {}
@@ -308,7 +290,8 @@ class TwinWidthEncoding:
         for n in od[:-1]:
             t = unmap[mg[n]]
             n = unmap[n]
-            print(f"{n} => {t}")
+            if verbose:
+                print(f"{n} => {t}")
             # graph_export, line_export = tools.dot_export(g, t, n)
             # with open(f"progress_{cnt}.dot", "w") as f:
             #     f.write(graph_export)
@@ -344,24 +327,19 @@ class TwinWidthEncoding:
                 for v in g.neighbors(u):
                     if g[u][v]['red']:
                         cc += 1
+                        # mn, mu, mv = self.node_map[n], self.node_map[u], self.node_map[v]
+                        # mu, mv = min(mu, mv), max(mu, mv)
+                        # if mv in self.edge[mn][mu]:
+                        #     if not model[self.tedge(mn, mu, mv)]:
+                        #         print("Missing red edge")
+                if cc > d:
+                    if verbose:
+                        print(f"Bound exceeded {cc}/{d}")
+                    self.encode_propagation(self.node_map[u], self.remapped_g, d, solver)
+                    return False
                 c_max = max(c_max, cc)
             cnt += 1
         #print(f"Done {c_max}/{d}")
         od = [unmap[x] for x in od]
         mg = {unmap[x]: unmap[y] for x, y in mg.items()}
         return c_max, od, mg
-
-    def sb_sth(self, g, formula, ub):
-        n = len(g.nodes)
-
-        for i in range(1, len(g.nodes) + 1):
-            inb = set(g.neighbors(i))
-            for j in range(i+1, len(g.nodes) + 1):
-                jnb = set(g.neighbors(j))
-                jnb.discard(i)
-                diff = jnb ^ inb  # Symmetric difference
-                diff.discard(j)
-
-                if len(diff) > ub:
-                    lits = [self.tord(x, i) for x in diff]
-                    formula.append([-self.merge[i][j], *lits])
