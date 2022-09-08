@@ -51,7 +51,7 @@ class TwinWidthEncoding2:
                 self.ord[i][t] = self.pool.id(f"ord{i}_{t}")
 
                 if t <= len(g.nodes) - d:
-                    self.merged[i][t] = self.pool.id(f"merged{i}_{t}")
+                    # self.merged[i][t] = self.pool.id(f"merged{i}_{t}")
 
                     for j in range(i + 1, len(g.nodes) + 1):
                         self.red[t][i][j] = self.pool.id(f"red{t}_{i}_{j}")
@@ -62,34 +62,39 @@ class TwinWidthEncoding2:
 
         # Assign one node to each time step
         for t in range(1, n-1):
-            self.formula.extend(tools.amo_commander([self.ord[t][i] for i in range(1, n+1)], self.pool))
+            self.formula.extend(
+                CardEnc.atmost([self.ord[t][i] for i in range(1, n+1)], bound=1, vpool=self.pool))
             self.formula.extend(CardEnc.atleast([self.ord[t][i] for i in range(1, n+1)], bound=1, vpool=self.pool))
 
         # Make sure each node is assigned only once...
         for i in range(1, n + 1):
-            self.formula.extend(tools.amo_commander([self.ord[t][i] for t in range(1, n + 1)], vpool=self.pool))
+            self.formula.extend(
+                CardEnc.atmost([self.ord[t][i] for t in range(1, n + 1)], bound=1, vpool=self.pool))
 
         # Mark nodes as merged
-        for i in range(1, n+1):
-            for t in range(1, n-d):
-                if t > 1:
-                    self.formula.append([-self.merged[i][t-1], self.merged[i][t]])
-                    self.formula.append([-self.ord[t][i], -self.merged[i][t-1]])
-                self.formula.append([-self.ord[t][i], self.merged[i][t]])
-
-            for t in range(n-d, n+1):
-                self.formula.append([-self.ord[t][i], -self.merged[i][n - d - 1]])
+        # for i in range(1, n+1):
+        #     for t in range(1, n-d):
+        #         if t > 1:
+        #             self.formula.append([-self.merged[i][t-1], self.merged[i][t]])
+        #             self.formula.append([-self.ord[t][i], -self.merged[i][t-1]])
+        #         self.formula.append([-self.ord[t][i], self.merged[i][t]])
+        #
+        #     for t in range(n-d, n+1):
+        #         self.formula.append([-self.ord[t][i], -self.merged[i][n - d - 1]])
 
     def encode_merge(self, n, d):
         for i in range(1, n):
-            self.formula.extend(tools.amo_commander([self.merge[i][j] for j in range(i + 1, n + 1)], self.pool))
+            self.formula.extend(
+                CardEnc.atmost([self.merge[i][j] for j in range(i + 1, n + 1)], bound=1, vpool=self.pool))
             self.formula.extend(CardEnc.atleast([self.merge[i][j] for j in range(i + 1, n + 1)], bound=1, vpool=self.pool))
 
         # Ensure that nodes are never merged into an already merged node
         for t in range(1, n - d):
             for i in range(1, n + 1):
                 for j in range(i+1, n + 1):
-                    self.formula.append([-self.ord[t][i], -self.merge[i][j], -self.merged[j][t]])
+                    for t2 in range(1, t):
+                        self.formula.append([-self.ord[t][i], -self.merge[i][j], -self.ord[t2][j]])
+                    # self.formula.append([-self.ord[t][i], -self.merge[i][j], -self.merged[j][t]])
 
     def tred(self, t, i, j):
         if i < j:
@@ -109,10 +114,10 @@ class TwinWidthEncoding2:
                     diff.discard(j)
 
                     for k in diff:
-                        self.formula.append(
-                            [-self.ord[t - 1][i], -self.merge[i][j], self.merged[k][t-1], self.tred(t-1, j, k)])
-                        # self.formula.append(
-                        #     [-self.merged[i][t-1], -self.merge[i][j], self.merged[j][t-1], self.merged[k][t - 1], self.tred(t - 1, j, k)])
+                        start = [-self.ord[t - 1][i], -self.merge[i][j], self.tred(t-1, j, k)]
+                        for t2 in range(1, t-1):
+                            start.append(self.ord[t2][k])
+                        self.formula.append(start)
 
                     # Transfer from merge source to merge target
                     for k in range(1, n + 1):
@@ -130,8 +135,9 @@ class TwinWidthEncoding2:
         for t in range(1, n-d):
             for i in range(1, n+1):
                 for j in range(i+1, n+1):
-                    self.formula.append([-self.merged[i][t], -self.red[t][i][j]])
-                    self.formula.append([-self.merged[j][t], -self.red[t][i][j]])
+                    # self.formula.append([-self.merged[i][t], -self.red[t][i][j]])
+                    # self.formula.append([-self.merged[j][t], -self.red[t][i][j]])
+                    pass
 
     def encode_counters(self, g, d):
         for t in range(1, len(g.nodes)-d):  # As last one is the root, no counter needed
@@ -222,13 +228,13 @@ class TwinWidthEncoding2:
                     unordered.remove(j)
             if len(od) < i:
                 print("Order missing")
-            if i < len(g.nodes) - d:
-                for c_node in od:
-                    if not model[self.merged[c_node][i]]:
-                        print(f"Not merged, node {c_node} step {i}")
-                for c_node in unordered:
-                    if model[self.merged[c_node][i]]:
-                        print(f"Merged, node {c_node} step {i}")
+            # if i < len(g.nodes) - d:
+            #     for c_node in od:
+            #         if not model[self.merged[c_node][i]]:
+            #             print(f"Not merged, node {c_node} step {i}")
+            #     for c_node in unordered:
+            #         if model[self.merged[c_node][i]]:
+            #             print(f"Merged, node {c_node} step {i}")
         if len(set(od)) < len(od):
             print("Node twice in order")
 

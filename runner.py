@@ -8,9 +8,10 @@ import networkx
 import pysat.solvers as slv
 
 import encoding as encoding
-import encoding2
-import encoding5 as other
-import encoding6 as other2
+import encoding_lazy as lazy
+import encoding_lazy2 as lazy2
+import encoding5 as encoding2
+
 import encoding_signed_bipartite
 import heuristic
 import parser
@@ -26,12 +27,14 @@ import treewidth
 
 instance = sys.argv[-1]
 print(instance)
+issat = False
 
 output_graphs = False
 if any(x == "-l" for x in sys.argv[1:-1]):
     output_graphs = True
 
 if instance.endswith(".cnf"):
+    issat = True
     g = parser.parse_cnf(instance)
     ub = heuristic.get_ub2_polarity(g)
     print(f"UB {ub}")
@@ -43,8 +46,9 @@ if instance.endswith(".cnf"):
         enc = encoding_signed_bipartite.TwinWidthEncoding()
         cb = enc.run(g, slv.Cadical, ub)
 else:
-    g = parser.parse(instance)[0]
-    # g = tools.prime_paley(29)
+    # g = parser.parse(instance)[0]
+    g = tools.prime_paley(73)
+    # g = tools.prime_square_paley(9)
 
     print(f"{len(g.nodes)} {len(g.edges)}")
     preprocessing.twin_merge(g)
@@ -60,11 +64,10 @@ else:
     ub = min(ub, ub2)
 
     start = time.time()
-    enc = encoding.TwinWidthEncoding()
-    # enc = other.TwinWidthEncoding2(g)
-    # enc = other2.TwinWidthEncoding()
+    #enc = encoding.TwinWidthEncoding()
+    # enc = lazy.TwinWidthEncoding()
     # enc = encoding2.TwinWidthEncoding2(g)
-
+    enc = lazy2.TwinWidthEncoding2(g)
     cb = enc.run(g, slv.Cadical, ub)
 
 print(f"Finished, result: {cb}")
@@ -82,26 +85,30 @@ if output_graphs:
         else:
             t = mg[n]
         with open(f"{instance_name}_{i}.dot", "w") as f:
-            f.write(tools.dot_export(g, n, t, True))
+            f.write(tools.dot_export(g, n, t, issat))
         with open(f"{instance_name}_{i}.png", "w") as f:
             subprocess.run(["dot", "-Tpng", f"{instance_name}_{i}.dot"], stdout=f)
 
         if n is None:
             break
 
-        tns = set(g.successors(t))
-        tnp = set(g.predecessors(t))
-        nns = set(g.successors(n))
-        nnp = set(g.predecessors(n))
+        if issat:
+            tns = set(g.successors(t))
+            tnp = set(g.predecessors(t))
+            nns = set(g.successors(n))
+            nnp = set(g.predecessors(n))
 
-        nn = nns | nnp
-        tn = tns | tnp
+            nn = nns | nnp
+            tn = tns | tnp
+        else:
+            nn = set(g.neighbors(n))
+            tn = set(g.neighbors(t))
 
         for v in nn:
             if v != t:
                 # Red remains, should edge exist
-                if (v in g[n] and g[n][v]['red']) or v not in tn or (v in nns and v not in tns) or (
-                        v in nnp and v not in tnp):
+                if (v in g[n] and g[n][v]['red']) or v not in tn or (issat and v in nns and v not in tns) or (
+                        issat and v in nnp and v not in tnp):
                     if g.has_edge(t, v):
                         g[t][v]['red'] = True
                     elif g.has_edge(v, t):
@@ -118,8 +125,12 @@ if output_graphs:
                 else:
                     g.add_edge(v, t, red=True)
 
-        for u in list(g.successors(n)):
-            g.remove_edge(n, u)
-        for u in list(g.predecessors(n)):
-            g.remove_edge(u, n)
+        if issat:
+            for u in list(g.successors(n)):
+                g.remove_edge(n, u)
+            for u in list(g.predecessors(n)):
+                g.remove_edge(u, n)
+        else:
+            for u in list(g.neighbors(n)):
+                g.remove_edge(u, n)
         g.nodes[n]["del"] = True

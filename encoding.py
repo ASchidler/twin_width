@@ -99,13 +99,15 @@ class TwinWidthEncoding:
                     # TODO: On dense graphs one could use the complementary graph...
                     formula.append([-self.merge[i][j], -self.tord(i, k), self.tedge(i, j, k)])
 
-        self.encode_reds2(g, formula)
+        self.encode_reds2(g, formula, d)
 
         # Encode counters
         self.totalizer = {}
         for i in range(1, len(g.nodes)): # As last one is the root, no counter needed
             self.totalizer[i] = {}
             for x in range(1, len(g.nodes) + 1):
+                if i == x:
+                    continue
                 vars = [self.tedge(i, x, y) for y in range(1, len(g.nodes)+1) if x != y]
                 self.totalizer[i][x] = ITotalizer(vars, ubound=d, top_id=self.pool.id(f"totalizer{i}_{x}"))
                 formula.extend(self.totalizer[i][x].cnf)
@@ -129,7 +131,9 @@ class TwinWidthEncoding:
             for i in range(start_bound, lb-1, -1):
                 if verbose:
                     print(f"{slv.nof_clauses()}/{slv.nof_vars()}")
-                if slv.solve(assumptions=self.get_card_vars(i)):
+                for cv in self.get_card_vars(i):
+                    slv.add_clause([cv])
+                if slv.solve():#(assumptions=self.get_card_vars(i)):
                     cb = i
                     if verbose:
                         print(f"Found {i}")
@@ -160,11 +164,11 @@ class TwinWidthEncoding:
 
         return vars
 
-    def encode_reds2(self, g, formula):
+    def encode_reds2(self, g, formula, d):
         auxes = {}
         for i in range(1, len(g.nodes) + 1):
             auxes[i] = {}
-            for j in range(i+1, len(g.nodes) + 1):
+            for j in range(1, len(g.nodes) + 1):
                 if j == i:
                     continue
                 c_aux = self.pool.id(f"a_red{i}_{j}")
@@ -174,7 +178,12 @@ class TwinWidthEncoding:
                         continue
 
                     # formula.append([-self.tord(k, i), -self.tord(k, j), -self.tedge(k, i, j), c_aux])
-                    formula.append([-self.tedge(k, i, j), c_aux])
+                    # formula.append([-self.tedge(k, i, j), c_aux])
+                    formula.append([-self.tord(i, j), -self.tedge(k, i, j), c_aux])
+            vars = [auxes[i][j] for j in range(1, len(g.nodes) + 1) if i != j]
+            c_tot = ITotalizer(vars, ubound=d, top_id=self.pool.id(f"totalizer_aux_{i}"))
+            formula.extend(c_tot.cnf)
+            self.pool.occupy(self.pool.top - 1, c_tot.top_id)
 
         # Maintain red arcs
         for i in range(1, len(g.nodes) + 1):
@@ -205,11 +214,7 @@ class TwinWidthEncoding:
                     if k == i or k == j:
                         continue
 
-                    if i < k:
-                        # We can make this ternary by doubling the aux vars and implying i < k that way
-                        formula.append([-self.merge[i][j], -self.tord(i, k), -auxes[i][k], self.tedge(i, j, k)])
-                    else:
-                        formula.append([-self.merge[i][j], -self.tord(i, k), -auxes[k][i], self.tedge(i, j, k)])
+                    formula.append([-self.merge[i][j], -self.tord(i, k), -auxes[i][k], self.tedge(i, j, k)])
 
     def sb_reds(self, n, formula):
         for i in range(1, n + 1):

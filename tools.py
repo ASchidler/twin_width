@@ -88,7 +88,7 @@ def dot_export(g, u, v, is_sat=False):
     for x, y in g.edges:
         cl = 'red' if 'red' in g[x][y] and g[x][y]['red'] else 'black'
         label = ""
-        if cl == "black":
+        if cl == "black" and is_sat:
             label = f"label=\"{'+' if x.startswith('c') else '-'} \";"
         output1 += f"n{cln(x)} -- n{cln(y)} [color={cl};{label}];{os.linesep}"
 
