@@ -156,10 +156,47 @@ class TwinWidthEncoding2:
         self.encode_red(n, d, g)
         self.encode_counters(g, d)
         self.sb(n, d)
+        self.sb_twohop(n, d, g, True)
 
         print(f"{len(self.formula.clauses)} / {self.formula.nv}")
         return self.formula
 
+    def sb_twohop(self, n, d, g, full=True):
+        for i in range(1, n + 1):
+            for j in range(i + 1, n + 1):
+                if g.has_edge(i, j):
+                    continue
+                istc = False
+                for k in range(1, n + 1):
+                    if g.has_edge(i, k) and g.has_edge(j, k):
+                        istc = True
+                        break
+                if istc:
+                    continue
+
+                self.formula.append([-self.ord[1][i], -self.merge[i][j]])
+                if not full:
+                    continue
+
+                for t in range(2, n-d):
+                    for k in range(1, n + 1):
+                        if k == i or k == j:
+                            continue
+
+                        overall_clause = [-self.merge[i][j], -self.ord[t][i], self.tred(t-1, i, j)]
+
+                        if g.has_edge(i, k):
+                            overall_clause.append(self.tred(t-1, j, k))
+                        elif g.has_edge(j, k):
+                            overall_clause.append(self.tred(t-1, i, k))
+                        else:
+                            aux = self.pool.id(f"tc_{t}_{i}_{k}_{j}")
+                            self.formula.append([-aux, self.tred(t-1, i, k)])
+                            self.formula.append([-aux, self.tred(t - 1, j, k)])
+                            self.formula.append([aux, -self.tred(t - 1, i, k), -self.tred(t - 1, j, k)])
+                            overall_clause.append(aux)
+
+                        self.formula.append(overall_clause)
     def run(self, g, solver, start_bound, verbose=True, check=True, timeout=0):
         start = time.time()
         cb = start_bound

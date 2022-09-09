@@ -168,6 +168,7 @@ class TwinWidthEncoding2:
 
                 while self.cstep < len(g.nodes) - lb:
                     self.add_step(len(g.nodes), self.g_mapped, lb, slv)
+                    self.sb_twohop(len(g.nodes), self.g_mapped, slv, True)
                     if verbose:
                         print(f"Bound: {lb}, Step: {self.cstep}")
 
@@ -189,6 +190,42 @@ class TwinWidthEncoding2:
         if timer is not None:
             timer.cancel()
         return cb
+
+    def sb_twohop(self, n, g, slv, full=True):
+        for i in range(1, n + 1):
+            for j in range(i + 1, n + 1):
+                if g.has_edge(i, j):
+                    continue
+                istc = False
+                for k in range(1, n + 1):
+                    if g.has_edge(i, k) and g.has_edge(j, k):
+                        istc = True
+                        break
+                if istc:
+                    continue
+
+                if self.cstep == 1:
+                    self.formula.append([-self.ord[1][i], -self.merge[i][j]])
+                if not full or self.cstep == 1:
+                    continue
+
+                for k in range(1, n + 1):
+                    if k == i or k == j:
+                        continue
+
+                    overall_clause = [-self.merge[i][j], -self.ord[self.cstep][i], self.tred(self.cstep-1, i, j)]
+
+                    if g.has_edge(i, k):
+                        overall_clause.append(self.tred(self.cstep - 1, j, k))
+                    elif g.has_edge(j, k):
+                        overall_clause.append(self.tred(self.cstep - 1, i, k))
+                    else:
+                        aux = self.pool.id(f"tc_{self.cstep}_{i}_{k}_{j}")
+                        slv.add_clause([-aux, self.tred(self.cstep-1, i, k)])
+                        slv.add_clause([-aux, self.tred(self.cstep - 1, j, k)])
+                        overall_clause.append(aux)
+
+                    slv.add_clause(overall_clause)
 
     def decode(self, model, g, d):
         g = g.copy()

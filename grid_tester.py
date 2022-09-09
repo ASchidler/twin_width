@@ -5,7 +5,7 @@ import encoding_lazy as encoding
 import encoding_lazy2 as lazy
 import encoding5
 
-g = grid_2d_graph(6, 6)
+g = grid_2d_graph(7, 7)
 #tools.solve_grid(g, 3)
 
 enc = encoding.TwinWidthEncoding()
