@@ -49,7 +49,7 @@ if instance.endswith(".cnf"):
         cb = enc.run(g, slv.Cadical, ub)
 else:
     # g = parser.parse(instance)[0]
-    g = tools.prime_paley(73)
+    g = tools.prime_paley(29)
     # g = tools.prime_square_paley(9)
 
     print(f"{len(g.nodes)} {len(g.edges)}")
@@ -70,7 +70,7 @@ else:
     # enc = lazy.TwinWidthEncoding()
     # enc = encoding2.TwinWidthEncoding2(g)
     enc = lazy2.TwinWidthEncoding2(g)
-    cb = enc.run(g, slv.Cadical, ub)
+    cb = enc.run(g, slv.Glucose3, ub)
 
 print(f"Finished, result: {cb}")
 

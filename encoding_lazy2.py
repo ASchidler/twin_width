@@ -101,7 +101,9 @@ class TwinWidthEncoding2:
 
         for i in range(1, len(g.nodes) + 1):
             vars = [self.tred(self.cstep, i, j) for j in range(1, len(g.nodes) + 1) if i != j]
-            slv.append_formula(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
+            formula, cardvars = self.encode_cards_exact(vars, d, f"cardvars_{self.cstep}_{i}")
+            slv.append_formula(formula)
+            #slv.append_formula(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
 
         for i in range(1, len(g.nodes)):
             caux = self.pool.id(f"mergelim_{self.cstep}_{i}")
@@ -109,12 +111,14 @@ class TwinWidthEncoding2:
             self.last_step.append(-caux)
             for t in range(1, self.cstep + 1):
                 clause.append(self.ord[t][i])
+
+            mclause = [-self.ord[self.cstep][i]]
             for j in range(i+1, len(g.nodes)):
                 clause.append(-self.merge[i][j])
+                mclause.append(self.merge[i][j])
                 slv.add_clause(clause)
                 clause.pop()
-
-
+            slv.add_clause(mclause)
 
 
     def init_var(self, g):
@@ -132,7 +136,7 @@ class TwinWidthEncoding2:
             #self.formula.extend(tools.amo_commander([self.merge[i][j] for j in range(i + 1, n + 1)], self.pool))
             self.formula.extend(
                 CardEnc.atmost([self.merge[i][j] for j in range(i + 1, n + 1)], bound=1, vpool=self.pool))
-            self.formula.extend(CardEnc.atleast([self.merge[i][j] for j in range(i + 1, n + 1)], bound=1, vpool=self.pool))
+            # self.formula.extend(CardEnc.atleast([self.merge[i][j] for j in range(i + 1, n + 1)], bound=1, vpool=self.pool))
 
     def tred(self, t, i, j):
         if i < j:
@@ -149,7 +153,6 @@ class TwinWidthEncoding2:
         self.init_var(g)
         self.encode_merge(n)
 
-        print(f"{len(self.formula.clauses)} / {self.formula.nv}")
         return self.formula
 
     def run(self, g, solver, start_bound, verbose=True, check=True, timeout=0):
@@ -184,7 +187,7 @@ class TwinWidthEncoding2:
                 c_slv = slv
                 formula = self.encode(g)
                 slv.append_formula(formula)
-
+                self.last_step.clear()
                 while self.cstep < len(g.nodes) - lb:
                     if len(self.last_step) > 0:
                         for cv in self.last_step:
@@ -196,7 +199,7 @@ class TwinWidthEncoding2:
                     if verbose:
                         print(f"Bound: {lb}, Step: {self.cstep}")
 
-                    result = (slv.solve() if timeout == 0 and len(self.last_step) else slv.solve_limited(self.last_step))
+                    result = (slv.solve() if timeout == 0 and len(self.last_step) == 0 else slv.solve_limited(self.last_step))
 
                     if cp is not None:
                         cp.kill()
@@ -214,7 +217,7 @@ class TwinWidthEncoding2:
                         if self.cstep < len(g.nodes) - lb:
                             inord = set(cb[1])
                             for cn in range(1, len(g.nodes)):
-                                if cn not in inord:
+                                if cn not in inord and cn in cb[2]:
                                     cb[2].pop(cn)
 
                             def run_solver(cdict):
@@ -364,3 +367,34 @@ class TwinWidthEncoding2:
             step += 1
         print(f"Done {c_max}/{d}")
         return c_max, od, mg
+
+    def encode_cards_exact(self, lits, bound, name):
+        matrix = [[self.pool.id(f"{name}_{x}_{y}") for y in range(0, bound+1)] for x in range(0, len(lits))]
+        form = CNF()
+        # Propagate up
+        for cb in range(0, bound+1):
+            for cr in range(0, len(lits)-1):
+                pass
+                form.append([-matrix[cr][cb], matrix[cr+1][cb]])
+
+        for cr in range(0, len(lits)):
+            form.append([-lits[cr], matrix[cr][0]])
+            if cr == 0:
+                form.append([-matrix[cr][0], lits[cr]])
+            else:
+                form.append([-matrix[cr][0], lits[cr], matrix[cr-1][0]])
+
+            if cr > 0:
+                for cb in range(0, bound):
+                    form.append([-lits[cr], -matrix[cr-1][cb], matrix[cr][cb+1]])
+                    form.append([-matrix[cr][cb + 1], matrix[cr][cb]])
+
+                    if cr == 0:
+                        form.append([-matrix[cr][cb+1], lits[cr]])
+                    else:
+                        form.append([-matrix[cr][cb+1], lits[cr], matrix[cr-1][cb+1]])
+
+        for cr  in range(0, len(lits)):
+            form.append([-matrix[cr][bound]])
+
+        return form, matrix[-1]
