@@ -4,8 +4,9 @@ from networkx import Graph
 from pysat.card import CardEnc, EncType
 from pysat.formula import CNF, IDPool
 from threading import Timer
+from multiprocessing import Process, Manager
 import tools
-
+import encoding5, encoding
 
 class TwinWidthEncoding2:
     def __init__(self, g, card_enc=EncType.totalizer):
@@ -19,6 +20,7 @@ class TwinWidthEncoding2:
         self.g_mapped = None
         self.cstep = 0
         self.card_enc = card_enc
+        self.last_step = []
 
     def remap_graph(self, g):
         self.node_map = {}
@@ -101,6 +103,20 @@ class TwinWidthEncoding2:
             vars = [self.tred(self.cstep, i, j) for j in range(1, len(g.nodes) + 1) if i != j]
             slv.append_formula(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
 
+        for i in range(1, len(g.nodes)):
+            caux = self.pool.id(f"mergelim_{self.cstep}_{i}")
+            clause = [caux]
+            self.last_step.append(-caux)
+            for t in range(1, self.cstep + 1):
+                clause.append(self.ord[t][i])
+            for j in range(i+1, len(g.nodes)):
+                clause.append(-self.merge[i][j])
+                slv.add_clause(clause)
+                clause.pop()
+
+
+
+
     def init_var(self, g):
         self.cstep = 0
         self.red = [[{} for _ in range(0, len(g.nodes) + 1)] for _ in range(0, len(g.nodes) + 1)]
@@ -160,6 +176,9 @@ class TwinWidthEncoding2:
         while not success:
             success = True
             result = False
+            cp = None
+            manager = Manager()
+            subret = manager.dict()
 
             with solver() as slv:
                 c_slv = slv
@@ -167,28 +186,70 @@ class TwinWidthEncoding2:
                 slv.append_formula(formula)
 
                 while self.cstep < len(g.nodes) - lb:
+                    if len(self.last_step) > 0:
+                        for cv in self.last_step:
+                            slv.add_clause([-cv])
+                        self.last_step.clear()
+
                     self.add_step(len(g.nodes), self.g_mapped, lb, slv)
-                    self.sb_twohop(len(g.nodes), self.g_mapped, slv, True)
+                    # self.sb_twohop(len(g.nodes), self.g_mapped, slv, True)
                     if verbose:
                         print(f"Bound: {lb}, Step: {self.cstep}")
 
-                    result = (slv.solve() if timeout == 0 else slv.solve_limited())
+                    result = (slv.solve() if timeout == 0 and len(self.last_step) else slv.solve_limited(self.last_step))
+
+                    if cp is not None:
+                        cp.kill()
+                        cp = None
+
                     if not result:
                         if verbose:
                             print(f"Unsat, increasing bound to {lb + 1}")
                         success = False
                         lb += 1
                         break
+                    else:
+                        cb = self.decode(slv.get_model(), g, lb)
+
+                        if self.cstep < len(g.nodes) - lb:
+                            inord = set(cb[1])
+                            for cn in range(1, len(g.nodes)):
+                                if cn not in inord:
+                                    cb[2].pop(cn)
+
+                            def run_solver(cdict):
+                                if verbose:
+                                    print("Running subsolver")
+                                # enc = encoding5.TwinWidthEncoding2(self.g_mapped)
+                                enc = encoding.TwinWidthEncoding()
+                                cbx = enc.run(self.g_mapped, solver, lb, lb=lb, od=cb[1], mg=cb[2])
+                                if cbx is not None and cbx != lb:
+                                    print("Subsolver succeeded")
+                                    cdict["result"] = cbx
+                                else:
+                                    print("Subsolver failed")
+
+                            # cp = Process(target=run_solver, args=(subret,))
+                            # cp.start()
 
                     if verbose:
                         print(f"Finished cycle in {time.time() - start}")
 
+                if len(subret) > 0:
+                    cb = subret["result"]
+                    success = True
+                    result = True
+
                 if result and success:
-                    cb = self.decode(slv.get_model(), g, lb)
                     break
 
         if timer is not None:
             timer.cancel()
+
+        if cp is not None:
+            cp.kill()
+            cp = None
+
         return cb
 
     def sb_twohop(self, n, g, slv, full=True):
@@ -239,7 +300,7 @@ class TwinWidthEncoding2:
         od = []
         unordered = set(range(1, len(g.nodes)+1))
 
-        for i in range(1, len(g.nodes) - d):
+        for i in range(1, self.cstep + 1):
             for j in range(1, len(g.nodes) + 1):
                 if model[self.ord[i][j]]:
                     if len(od) >= i:
@@ -302,4 +363,4 @@ class TwinWidthEncoding2:
 
             step += 1
         print(f"Done {c_max}/{d}")
-        return c_max
+        return c_max, od, mg

@@ -145,12 +145,21 @@ class TwinWidthEncoding2:
                 vars = [self.tred(t, i, j) for j in range(1, len(g.nodes)+1) if i != j]
                 self.formula.extend(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
 
-    def encode(self, g, d):
+    def encode(self, g, d, od=None, mg=None):
         g = self.remap_graph(g)
         n = len(g.nodes)
         self.pool = IDPool()
         self.formula = CNF()
         self.init_var(g, d)
+
+        if od is not None:
+            for i, u in enumerate(od):
+                self.formula.append([-self.ord[i+1][u]])
+
+        if mg is not None:
+            for k, v in mg.items():
+                self.formula.append([-self.merge[k][v]])
+
         self.encode_order(n, d)
         self.encode_merge(n, d)
         self.encode_red(n, d, g)
@@ -158,7 +167,6 @@ class TwinWidthEncoding2:
         self.sb(n, d)
         self.sb_twohop(n, d, g, True)
 
-        print(f"{len(self.formula.clauses)} / {self.formula.nv}")
         return self.formula
 
     def sb_twohop(self, n, d, g, full=True):
@@ -197,12 +205,9 @@ class TwinWidthEncoding2:
                             overall_clause.append(aux)
 
                         self.formula.append(overall_clause)
-    def run(self, g, solver, start_bound, verbose=True, check=True, timeout=0):
+    def run(self, g, solver, start_bound, verbose=True, check=True, lb = 0, timeout=0, od=None, mg=None):
         start = time.time()
         cb = start_bound
-
-        if verbose:
-            print(f"Created encoding in {time.time() - start}")
 
         done = []
         c_slv = None
@@ -217,12 +222,15 @@ class TwinWidthEncoding2:
             timer.start()
 
         i = start_bound
-        while i >= 0:
+        while i >= lb:
             if done:
                 break
             with solver() as slv:
                 c_slv = slv
-                formula = self.encode(g, i)
+                formula = self.encode(g, i, od, mg)
+                if verbose:
+                    print(f"Created encoding in {time.time() - start} {slv.nof_clauses()}/{slv.nof_vars()}")
+
                 slv.append_formula(formula)
 
                 if done:
