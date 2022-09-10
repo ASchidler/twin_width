@@ -39,7 +39,7 @@ class TwinWidthEncoding2:
 
         return gn
 
-    def add_step(self, n, g, d, slv):
+    def add_step(self, n, g, d, slv, use_merge_sb=True):
         self.cstep += 1
 
         # Encode ordering
@@ -99,26 +99,40 @@ class TwinWidthEncoding2:
                         continue
                     slv.add_clause([self.ord[self.cstep][i], self.ord[self.cstep][j], -self.tred(self.cstep - 1, i, j), self.tred(self.cstep, i, j)])
 
+        c_step_almosts = []
         for i in range(1, len(g.nodes) + 1):
             vars = [self.tred(self.cstep, i, j) for j in range(1, len(g.nodes) + 1) if i != j]
             formula, cardvars = self.encode_cards_exact(vars, d, f"cardvars_{self.cstep}_{i}")
             slv.append_formula(formula)
-            #slv.append_formula(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
+            if d > 0:
+                c_step_almosts.append(cardvars[-2])
+            # slv.append_formula(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
 
-        for i in range(1, len(g.nodes)):
-            caux = self.pool.id(f"mergelim_{self.cstep}_{i}")
-            clause = [caux]
-            self.last_step.append(-caux)
-            for t in range(1, self.cstep + 1):
-                clause.append(self.ord[t][i])
+        if self.cstep > 1 and d > 0:
+            for i in range(1, len(g.nodes) + 1):
+                for j in range(i + 1, len(g.nodes) + 1):
+                    clause = list(c_step_almosts)
+                    clause.extend([-self.ord[self.cstep-1][j], -self.ord[self.cstep][i]])
+                    slv.add_clause(clause)
 
-            mclause = [-self.ord[self.cstep][i]]
-            for j in range(i+1, len(g.nodes)):
-                clause.append(-self.merge[i][j])
-                mclause.append(self.merge[i][j])
-                slv.add_clause(clause)
-                clause.pop()
-            slv.add_clause(mclause)
+
+        if use_merge_sb:
+            for i in range(1, len(g.nodes)):
+            #     caux = self.pool.id(f"mergelim_{self.cstep}_{i}")
+            #     clause = [caux]
+            #     self.last_step.append(-caux)
+            #     for t in range(1, self.cstep + 1):
+            #         clause.append(self.ord[t][i])
+            #
+                mclause = [-self.ord[self.cstep][i]]
+                for j in range(i+1, len(g.nodes)):
+            #         clause.append(-self.merge[i][j])
+                    mclause.append(self.merge[i][j])
+            #         slv.add_clause(clause)
+            #         clause.pop()
+                slv.add_clause(mclause)
+
+
 
 
     def init_var(self, g):
@@ -131,12 +145,13 @@ class TwinWidthEncoding2:
             for j in range(i+1, len(g.nodes)+1):
                 self.merge[i][j] = self.pool.id(f"merge{i}_{j}")
 
-    def encode_merge(self, n):
+    def encode_merge(self, n, use_merge_sb=True):
         for i in range(1, n):
             #self.formula.extend(tools.amo_commander([self.merge[i][j] for j in range(i + 1, n + 1)], self.pool))
             self.formula.extend(
                 CardEnc.atmost([self.merge[i][j] for j in range(i + 1, n + 1)], bound=1, vpool=self.pool))
-            # self.formula.extend(CardEnc.atleast([self.merge[i][j] for j in range(i + 1, n + 1)], bound=1, vpool=self.pool))
+            if not use_merge_sb:
+                self.formula.extend(CardEnc.atleast([self.merge[i][j] for j in range(i + 1, n + 1)], bound=1, vpool=self.pool))
 
     def tred(self, t, i, j):
         if i < j:
@@ -144,18 +159,19 @@ class TwinWidthEncoding2:
         else:
             return self.red[t][j][i]
 
-    def encode(self, g):
+    def encode(self, g, use_merge_sb=True):
         g = self.remap_graph(g)
         self.g_mapped = g
         n = len(g.nodes)
         self.pool = IDPool()
         self.formula = CNF()
         self.init_var(g)
-        self.encode_merge(n)
+        self.encode_merge(n, use_merge_sb)
 
         return self.formula
 
     def run(self, g, solver, start_bound, verbose=True, check=True, timeout=0):
+        use_merge_sb = True
         start = time.time()
         cb = start_bound
 
@@ -179,13 +195,10 @@ class TwinWidthEncoding2:
         while not success:
             success = True
             result = False
-            cp = None
-            manager = Manager()
-            subret = manager.dict()
 
             with solver() as slv:
                 c_slv = slv
-                formula = self.encode(g)
+                formula = self.encode(g, use_merge_sb)
                 slv.append_formula(formula)
                 self.last_step.clear()
                 while self.cstep < len(g.nodes) - lb:
@@ -194,16 +207,15 @@ class TwinWidthEncoding2:
                             slv.add_clause([-cv])
                         self.last_step.clear()
 
-                    self.add_step(len(g.nodes), self.g_mapped, lb, slv)
+                    self.add_step(len(g.nodes), self.g_mapped, lb, slv, use_merge_sb)
                     # self.sb_twohop(len(g.nodes), self.g_mapped, slv, True)
                     if verbose:
-                        print(f"Bound: {lb}, Step: {self.cstep}")
+                        print(f"Bound: {lb}, Step: {self.cstep} {slv.nof_clauses()}/{slv.nof_vars()}")
 
                     result = (slv.solve() if timeout == 0 and len(self.last_step) == 0 else slv.solve_limited(self.last_step))
 
-                    if cp is not None:
-                        cp.kill()
-                        cp = None
+                    if verbose:
+                        print(f"Finished cycle in {time.time() - start}")
 
                     if not result:
                         if verbose:
@@ -211,47 +223,13 @@ class TwinWidthEncoding2:
                         success = False
                         lb += 1
                         break
-                    else:
-                        cb = self.decode(slv.get_model(), g, lb)
-
-                        if self.cstep < len(g.nodes) - lb:
-                            inord = set(cb[1])
-                            for cn in range(1, len(g.nodes)):
-                                if cn not in inord and cn in cb[2]:
-                                    cb[2].pop(cn)
-
-                            def run_solver(cdict):
-                                if verbose:
-                                    print("Running subsolver")
-                                # enc = encoding5.TwinWidthEncoding2(self.g_mapped)
-                                enc = encoding.TwinWidthEncoding()
-                                cbx = enc.run(self.g_mapped, solver, lb, lb=lb, od=cb[1], mg=cb[2])
-                                if cbx is not None and cbx != lb:
-                                    print("Subsolver succeeded")
-                                    cdict["result"] = cbx
-                                else:
-                                    print("Subsolver failed")
-
-                            # cp = Process(target=run_solver, args=(subret,))
-                            # cp.start()
-
-                    if verbose:
-                        print(f"Finished cycle in {time.time() - start}")
-
-                if len(subret) > 0:
-                    cb = subret["result"]
-                    success = True
-                    result = True
 
                 if result and success:
+                    cb = self.decode(slv.get_model(), g, lb)
                     break
 
         if timer is not None:
             timer.cancel()
-
-        if cp is not None:
-            cp.kill()
-            cp = None
 
         return cb
 

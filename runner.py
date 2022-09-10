@@ -70,7 +70,7 @@ else:
     # enc = lazy.TwinWidthEncoding()
     # enc = encoding2.TwinWidthEncoding2(g)
     enc = lazy2.TwinWidthEncoding2(g)
-    cb = enc.run(g, slv.Glucose3, ub)
+    cb = enc.run(g, slv.Cadical, ub)
 
 print(f"Finished, result: {cb}")
 
