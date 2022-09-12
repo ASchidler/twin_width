@@ -10,7 +10,7 @@ import pysat.solvers as slv
 import encoding as encoding
 import encoding_lazy as lazy
 import encoding_lazy2 as lazy2
-import encoding5 as encoding2
+import encoding2 as encoding2
 
 import encoding_signed_bipartite
 import heuristic
@@ -22,6 +22,7 @@ from networkx.generators.random_graphs import gnp_random_graph
 import resource
 import treewidth
 
+resource.setrlimit(resource.RLIMIT_AS, (16 * 1024 * 1024 * 1024, 16 * 1024 * 1024 * 1024))
 
 #print(f"{tools.solve_grid2(7,7, 3)}")
 
@@ -40,6 +41,7 @@ if instance.endswith(".cnf"):
     print(f"UB {ub}")
 
     start = time.time()
+
     if len(sys.argv) > 2 and not output_graphs:
         cb = treewidth.solve(g.to_undirected(), len(g.nodes) - 1, slv.Glucose3, True)[1]
     else:
@@ -47,7 +49,7 @@ if instance.endswith(".cnf"):
         cb = enc.run(g, slv.Cadical, ub)
 else:
     # g = parser.parse(instance)[0]
-    g = tools.prime_paley(73)
+    g = tools.prime_paley(29)
     # g = tools.prime_square_paley(9)
 
     print(f"{len(g.nodes)} {len(g.edges)}")
@@ -64,10 +66,10 @@ else:
     ub = min(ub, ub2)
 
     start = time.time()
-    #enc = encoding.TwinWidthEncoding()
+    enc = encoding.TwinWidthEncoding()
     # enc = lazy.TwinWidthEncoding()
-    # enc = encoding2.TwinWidthEncoding2(g)
-    enc = lazy2.TwinWidthEncoding2(g)
+    enc = encoding2.TwinWidthEncoding2(g, cubic=2)
+    # enc = lazy2.TwinWidthEncoding2(g, cubic=False)
     cb = enc.run(g, slv.Cadical, ub)
 
 print(f"Finished, result: {cb}")
@@ -120,7 +122,10 @@ if output_graphs:
             if v not in nn:
                 if g.has_edge(t, v):
                     g[t][v]['red'] = True
-                elif g.has_edge(v, t):
+                else:
+                    g.add_edge(t, v, red=True)
+
+                if g.has_edge(v, t):
                     g[v][t]['red'] = True
                 else:
                     g.add_edge(v, t, red=True)

@@ -1,5 +1,7 @@
+import math
 import os
 import sys
+from collections import defaultdict
 
 import networkx as nx
 from pysat.card import CardEnc
@@ -87,10 +89,10 @@ def dot_export(g, u, v, is_sat=False):
 
     for x, y in g.edges:
         cl = 'red' if 'red' in g[x][y] and g[x][y]['red'] else 'black'
-        label = ""
-        if cl == "black" and is_sat:
-            label = f"label=\"{'+' if x.startswith('c') else '-'} \";"
-        output1 += f"n{cln(x)} -- n{cln(y)} [color={cl};{label}];{os.linesep}"
+        if is_sat:
+            output1 += f"n{cln(x)} -- n{cln(y)} [color={cl},label=\"{'-' if cln(x).startswith('v') else '+'}\"];{os.linesep}"
+        else:
+            output1 += f"n{cln(x)} -- n{cln(y)} [color={cl}];{os.linesep}"
 
     # # Draw the linegraph
     # output2 = "strict graph dt {" + os.linesep
@@ -526,3 +528,115 @@ def solve_quick_(adj, nbs, contracted, od, mg, ub, counts):
                         print(f"Conflict {len(od)}")
 
     return best
+
+def encode_card_0(lits, form):
+    for cl in lits:
+        form.append([-cl])
+def encode_cards_exact(pool, lits, bound, name):
+    matrix = [[pool.id(f"{name}_{x}_{y}") for y in range(0, bound+1)] for x in range(0, len(lits))]
+    form = CNF()
+    if bound >= len(lits):
+        return form
+
+    if bound == 0:
+        encode_card_0(lits, form)
+        return form
+
+    # Propagate up
+    for cb in range(0, bound+1):
+        for cr in range(0, len(lits)-1):
+            pass
+            form.append([-matrix[cr][cb], matrix[cr+1][cb]])
+
+    for cr in range(0, len(lits)):
+        form.append([-lits[cr], matrix[cr][0]])
+        if cr == 0:
+            form.append([-matrix[cr][0], lits[cr]])
+        else:
+            form.append([-matrix[cr][0], lits[cr], matrix[cr-1][0]])
+
+        if cr > 0:
+            for cb in range(0, bound):
+                form.append([-lits[cr], -matrix[cr-1][cb], matrix[cr][cb+1]])
+                form.append([-matrix[cr][cb + 1], matrix[cr][cb]])
+
+                if cr == 0:
+                    form.append([-matrix[cr][cb+1], lits[cr]])
+                else:
+                    form.append([-matrix[cr][cb+1], lits[cr], matrix[cr-1][cb+1]])
+
+    for cr in range(0, len(lits)):
+        form.append([-matrix[cr][bound]])
+
+    return form, matrix[-1]
+
+
+def encode_cards_exact_tot(pool, lits, bound, name):
+    form = CNF()
+    if bound >= len(lits):
+        return form
+
+    if bound == 0:
+        encode_card_0(lits, form)
+        return form
+
+    cvars = [pool.id(f"{name}_{x}") for x in range(0, len(lits))]
+
+    ilst = list(lits)
+    olst = list(cvars)
+
+    stack = [(ilst, olst, pool.top)]
+
+    while stack:
+        ilst, olst, vid = stack.pop()
+
+        n = len(ilst)
+        half = n - (n//2)
+
+        fhalf = ilst[:half]
+        shalf = ilst[half:]
+
+        if len(fhalf) < 2:
+            ofhalf = list(fhalf)
+        else:
+            ofhalf = [pool.id(f"{name}_fh_{vid}_{x}") for x in range(0, len(fhalf))]
+            stack.append((fhalf, ofhalf, pool.top))
+
+        if len(shalf) < 2:
+            oshalf = list(shalf)
+        else:
+            oshalf = [pool.id(f"{name}_sh_{vid}_{x}") for x in range(0, len(shalf))]
+            stack.append((shalf, oshalf, pool.top))
+
+        for j in range(0, len(oshalf)):
+            form.append([-oshalf[j], olst[j]])
+
+        for i in range(0, len(ofhalf)):
+            form.append([-ofhalf[i], olst[i]])
+
+        cl = [[] for _ in range(0, len(olst) + 1)]
+        for i in range(1, len(ofhalf)+1):
+            for j in range(1, len(oshalf) + 1):
+                form.append([-ofhalf[i-1], -oshalf[j-1], olst[i + j -1]])
+                # cl[]
+                # aux = pool.id(f"{name}_olsta_{vid}_{i}_{j}")
+                # form.append([-ofhalf[i - 1], -oshalf[j - 1], aux])
+                # form.append([ofhalf[i - 1], -aux])
+                # form.append([oshalf[j - 1], -aux])
+                cl[i + j - 1].append(ofhalf[i-1])
+
+        # Reverse
+        for i in range(0, len(olst)):
+            if i < len(ofhalf):
+                cl[i].append(ofhalf[i])
+            if i < len(oshalf):
+                cl[i].append(oshalf[i])
+
+            cl[i].append(-olst[i])
+            form.append(cl[i])
+
+    # Enforce bound
+    for cr in range(0, len(lits)):
+        form.append([-cvars[bound]])
+
+    return form, cvars[:bound+1]

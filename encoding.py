@@ -58,11 +58,22 @@ class TwinWidthEncoding:
 
         return self.edge[n][j][i]
 
-    def encode(self, g, d):
+    def encode(self, g, d, od, mg):
         g = self.remap_graph(g)
         n = len(g.nodes)
         self.init_var(g)
         formula = CNF()
+        if od is not None:
+            done = set()
+            for cn in od:
+                done.add(cn)
+                for i in range(1, len(g.nodes) + 1):
+                    if i not in done and i != cn:
+                        formula.append([-self.tord(cn, i)])
+
+        if mg is not None:
+            for k, v in mg.items():
+                formula.append([-self.merge[k][v]])
 
         # Encode relationships
         # Transitivity
@@ -117,9 +128,9 @@ class TwinWidthEncoding:
         self.sb_reds(n, formula)
         return formula
 
-    def run(self, g, solver, start_bound, verbose=True, check=True, lb=0):
+    def run(self, g, solver, start_bound, verbose=True, check=True, lb=0, od=None, mg=None):
         start = time.time()
-        formula = self.encode(g, start_bound)
+        formula = self.encode(g, start_bound, od, mg)
         cb = start_bound
 
         if verbose:
