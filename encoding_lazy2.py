@@ -340,12 +340,13 @@ class TwinWidthEncoding2:
         if len(set(od)) < len(od):
             print("Node twice in order")
 
-        for i in range(1, len(g.nodes)):
-            for j in range(i+1, len(g.nodes) + 1):
+        for i in range(1, len(od)+1 if self.cubic else len(g.nodes) + 1):
+            for j in range(1 if self.cubic else i+1, len(g.nodes) + 1):
                 if model[self.merge[i][j]]:
-                    if i in mg:
+                    t = od[i-1] if self.cubic else i
+                    if t in mg:
                         print("Error, double merge!")
-                    mg[i] = j
+                    mg[t] = j
 
         # Perform contractions, last node needs not be contracted...
         for u, v in g.edges:

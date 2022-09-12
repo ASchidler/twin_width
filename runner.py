@@ -9,8 +9,8 @@ import pysat.solvers as slv
 
 import encoding as encoding
 import encoding_lazy as lazy
-import encoding_lazy4 as lazy2
-import encoding5 as encoding2
+import encoding_lazy2 as lazy2
+import encoding2 as encoding2
 
 import encoding_signed_bipartite
 import heuristic
@@ -66,10 +66,10 @@ else:
     ub = min(ub, ub2)
 
     start = time.time()
-    #enc = encoding.TwinWidthEncoding()
+    enc = encoding.TwinWidthEncoding()
     # enc = lazy.TwinWidthEncoding()
-    enc = encoding2.TwinWidthEncoding2(g, cubic=0)
-    #enc = lazy2.TwinWidthEncoding2(g)
+    enc = encoding2.TwinWidthEncoding2(g, cubic=2)
+    # enc = lazy2.TwinWidthEncoding2(g, cubic=False)
     cb = enc.run(g, slv.Cadical, ub)
 
 print(f"Finished, result: {cb}")
