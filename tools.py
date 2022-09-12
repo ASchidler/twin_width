@@ -526,3 +526,35 @@ def solve_quick_(adj, nbs, contracted, od, mg, ub, counts):
                         print(f"Conflict {len(od)}")
 
     return best
+
+
+def encode_cards_exact(pool, lits, bound, name):
+    matrix = [[pool.id(f"{name}_{x}_{y}") for y in range(0, bound+1)] for x in range(0, len(lits))]
+    form = CNF()
+    # Propagate up
+    for cb in range(0, bound+1):
+        for cr in range(0, len(lits)-1):
+            pass
+            form.append([-matrix[cr][cb], matrix[cr+1][cb]])
+
+    for cr in range(0, len(lits)):
+        form.append([-lits[cr], matrix[cr][0]])
+        if cr == 0:
+            form.append([-matrix[cr][0], lits[cr]])
+        else:
+            form.append([-matrix[cr][0], lits[cr], matrix[cr-1][0]])
+
+        if cr > 0:
+            for cb in range(0, bound):
+                form.append([-lits[cr], -matrix[cr-1][cb], matrix[cr][cb+1]])
+                form.append([-matrix[cr][cb + 1], matrix[cr][cb]])
+
+                if cr == 0:
+                    form.append([-matrix[cr][cb+1], lits[cr]])
+                else:
+                    form.append([-matrix[cr][cb+1], lits[cr], matrix[cr-1][cb+1]])
+
+    for cr in range(0, len(lits)):
+        form.append([-matrix[cr][bound]])
+
+    return form, matrix[-1]

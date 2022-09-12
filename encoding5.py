@@ -8,16 +8,21 @@ import tools
 
 
 class TwinWidthEncoding2:
-    def __init__(self, g, card_enc=EncType.totalizer):
+    def __init__(self, g, card_enc=EncType.totalizer, cubic=0, sb_ord=False, twohop=False):
         self.ord = None
         self.merge = None
-        self.merged = None
+        self.merged_edge = None
+        self.merged_at = None
         self.node_map = None
         self.pool = None
         self.formula = None
         self.totalizer = None
+        self.cardvars = None
         self.g = g
         self.card_enc = card_enc
+        self.cubic = cubic
+        self.sb_ord = sb_ord
+        self.twohop = twohop
 
     def remap_graph(self, g):
         self.node_map = {}
@@ -40,61 +45,98 @@ class TwinWidthEncoding2:
         self.red = [[{} for _ in range(0, len(g.nodes) + 1)] for _ in range(0, len(g.nodes) + 1)]
         self.ord = [{} for _ in range(0, len(g.nodes) + 1)]
         self.merge = [{} for _ in range(0, len(g.nodes) + 1)]
-        self.merged = [{} for _ in range(0, len(g.nodes) + 1)]
+        self.cardvars = [[] for _ in range(0, len(g.nodes) + 1)]
 
-        for i in range(1, len(g.nodes)+1):
-            for j in range(i+1, len(g.nodes)+1):
-                self.merge[i][j] = self.pool.id(f"merge{i}_{j}")
+        if self.cubic < 2:
+            for i in range(1, len(g.nodes)+1):
+                for j in range(i+1, len(g.nodes)+1):
+                    self.merge[i][j] = self.pool.id(f"merge{i}_{j}")
+            if self.cubic == 1:
+                self.merged_at = [{} for _ in range(0, len(g.nodes) + 1)]
+                for t in range(2, len(g.nodes) - d):
+                    for j in range(1, len(g.nodes) + 1):
+                        self.merged_at[t][j] = self.pool.id(f"ma{t}_{j}")
+        else:
+            for t in range(1, len(g.nodes) - d):
+                for j in range(1, len(g.nodes)+1):
+                    self.merge[t][j] = self.pool.id(f"merge{t}_{j}")
 
-        for t in range(1, len(g.nodes) + 1):
+        if self.cubic > 0:
+            self.merged_edge = [{} for _ in range(0, len(g.nodes) + 1)]
+            for t in range(2, len(g.nodes) - d):
+                for j in range(1, len(g.nodes)+1):
+                    self.merged_edge[t][j] = self.pool.id(f"me{t}_{j}")
+
+        for t in range(1, len(g.nodes) - d):
             for i in range(1, len(g.nodes) + 1):
-                self.ord[i][t] = self.pool.id(f"ord{i}_{t}")
+                self.ord[t][i] = self.pool.id(f"ord{t}_{i}")
 
-                if t <= len(g.nodes) - d:
-                    # self.merged[i][t] = self.pool.id(f"merged{i}_{t}")
-
-                    for j in range(i + 1, len(g.nodes) + 1):
-                        self.red[t][i][j] = self.pool.id(f"red{t}_{i}_{j}")
+                for j in range(i + 1, len(g.nodes) + 1):
+                    self.red[t][i][j] = self.pool.id(f"red{t}_{i}_{j}")
 
     def encode_order(self, n, d):
-        self.formula.append([self.ord[n][n]])
-        self.formula.append([self.ord[n-1][n-1]])
-
         # Assign one node to each time step
-        for t in range(1, n-1):
+        for t in range(1, n-d):
+            self.formula.append([-self.ord[t][n]])
+            self.formula.append([-self.ord[t][n - 1]])
             self.formula.extend(
                 CardEnc.atmost([self.ord[t][i] for i in range(1, n+1)], bound=1, vpool=self.pool))
-            self.formula.extend(CardEnc.atleast([self.ord[t][i] for i in range(1, n+1)], bound=1, vpool=self.pool))
+            self.formula.append([self.ord[t][i] for i in range(1, n + 1)])
 
         # Make sure each node is assigned only once...
         for i in range(1, n + 1):
             self.formula.extend(
-                CardEnc.atmost([self.ord[t][i] for t in range(1, n + 1)], bound=1, vpool=self.pool))
-
-        # Mark nodes as merged
-        # for i in range(1, n+1):
-        #     for t in range(1, n-d):
-        #         if t > 1:
-        #             self.formula.append([-self.merged[i][t-1], self.merged[i][t]])
-        #             self.formula.append([-self.ord[t][i], -self.merged[i][t-1]])
-        #         self.formula.append([-self.ord[t][i], self.merged[i][t]])
-        #
-        #     for t in range(n-d, n+1):
-        #         self.formula.append([-self.ord[t][i], -self.merged[i][n - d - 1]])
+                CardEnc.atmost([self.ord[t][i] for t in range(1, n - d)], bound=1, vpool=self.pool))
 
     def encode_merge(self, n, d):
-        for i in range(1, n):
-            self.formula.extend(
-                CardEnc.atmost([self.merge[i][j] for j in range(i + 1, n + 1)], bound=1, vpool=self.pool))
-            self.formula.extend(CardEnc.atleast([self.merge[i][j] for j in range(i + 1, n + 1)], bound=1, vpool=self.pool))
+        if self.cubic < 2:
+            for i in range(1, n):
+                self.formula.extend(
+                    CardEnc.atmost([self.merge[i][j] for j in range(i + 1, n + 1)], bound=1, vpool=self.pool))
+                self.formula.append([self.merge[i][j] for j in range(i + 1, n + 1)])
 
-        # Ensure that nodes are never merged into an already merged node
-        for t in range(1, n - d):
-            for i in range(1, n + 1):
-                for j in range(i+1, n + 1):
+            # Ensure that nodes are never merged into an already merged node
+            for t in range(1, n - d):
+                for i in range(1, n + 1):
+                    for j in range(i+1, n + 1):
+                        if t > 1 and self.cubic == 1:
+                            self.formula.append([-self.ord[t][i], -self.merge[i][j], self.merged_at[t][j]])
+                        for t2 in range(1, t):
+                            self.formula.append([-self.ord[t][i], -self.merge[i][j], -self.ord[t2][j]])
+        else:
+            for t in range(1, n-d):
+                self.formula.extend(
+                    CardEnc.atmost([self.merge[t][j] for j in range(1, n + 1)], bound=1, vpool=self.pool))
+                self.formula.append([self.merge[t][j] for j in range(1, n + 1)])
+
+                for i in range(1, n+1):
+                    # Do not merge with yourself
+                    self.formula.append([-self.ord[t][i], -self.merge[t][i]])
+                    # Do not merge with merged nodes
                     for t2 in range(1, t):
-                        self.formula.append([-self.ord[t][i], -self.merge[i][j], -self.ord[t2][j]])
-                    # self.formula.append([-self.ord[t][i], -self.merge[i][j], -self.merged[j][t]])
+                        self.formula.append([-self.ord[t2][i], -self.merge[t][i]])
+
+        if self.cubic > 0:
+            for t in range(2, n-d):
+                for i in range(1, n + 1):
+                    for k in range(1, n+1):
+                        if k == i:
+                            continue
+                        self.formula.append([-self.ord[t][i], -self.tred(t-1, i, k), self.merged_edge[t][k]])
+
+    def encode_sb_order(self, n, d):
+        """Enforce lex ordering whenever there is no node that reaches the bound at time t"""
+        if d == 0:
+            return
+
+        for t in range(2, n - d):
+            c_step_almosts = [self.cardvars[t][x][-2] for x in range(0, n)]
+            for t2 in range(1, t):
+                for i in range(1, n + 1):
+                    for j in range(i + 1, n + 1):
+                        clause = list(c_step_almosts)
+                        clause.extend([-self.ord[t2][j], -self.ord[t][i]])
+                        self.formula.append(clause)
 
     def tred(self, t, i, j):
         if i < j:
@@ -105,8 +147,11 @@ class TwinWidthEncoding2:
     def encode_red(self, n, d, g):
         for i in range(1, n + 1):
             inb = set(g.neighbors(i))
-            for t in range(2, n - d + 1):
-                for j in range(i+1, n+1):
+            for t in range(1, n - d):
+                for j in range(i+1 if self.cubic < 2 else 1, n+1):
+                    if i == j:
+                        continue
+
                     # Create red arcs
                     jnb = set(g.neighbors(j))
                     jnb.discard(i)
@@ -114,36 +159,56 @@ class TwinWidthEncoding2:
                     diff.discard(j)
 
                     for k in diff:
-                        start = [-self.ord[t - 1][i], -self.merge[i][j], self.tred(t-1, j, k)]
+                        if self.cubic < 2:
+                            start = [-self.ord[t][i], -self.merge[i][j], self.tred(t, j, k)]
+                        else:
+                            start = [-self.ord[t][i], -self.merge[t][j], self.tred(t, j, k)]
                         for t2 in range(1, t-1):
                             start.append(self.ord[t2][k])
                         self.formula.append(start)
 
                     # Transfer from merge source to merge target
-                    for k in range(1, n + 1):
-                        if i == k or j == k:
-                            continue
-                        self.formula.append([-self.ord[t][i], -self.merge[i][j], -self.tred(t-1, i, k), self.tred(t, j, k)])
+                    if self.cubic == 0 and t > 1:
+                        for k in range(1, n + 1):
+                            if i == k or j == k:
+                                continue
+                            self.formula.append([-self.ord[t][i], -self.merge[i][j], -self.tred(t-1, i, k), self.tred(t, j, k)])
+
+                    if self.sb_ord and i < j and self.cubic == 2:
+                        if t > 1:
+                            self.formula.append(
+                                [-self.tred(t, i, j), self.tred(t-1, i, j), self.merge[t][j], self.merge[t][i]])
+                        else:
+                            self.formula.append(
+                                [-self.tred(t, i, j), self.merge[t][j], self.merge[t][i]])
 
                 # Maintain all other red arcs
-                for j in range(1, n+1):
-                    if i == j:
-                        continue
-                    self.formula.append([self.ord[t][i], self.ord[t][j], -self.tred(t - 1, i, j), self.tred(t, i, j)])
-
-    def sb(self, n, d):
-        for t in range(1, n-d):
-            for i in range(1, n+1):
-                for j in range(i+1, n+1):
-                    # self.formula.append([-self.merged[i][t], -self.red[t][i][j]])
-                    # self.formula.append([-self.merged[j][t], -self.red[t][i][j]])
-                    pass
+                if t > 1:
+                    for j in range(1, n+1):
+                        if i == j:
+                            continue
+                        self.formula.append([self.ord[t][i], self.ord[t][j], -self.tred(t - 1, i, j), self.tred(t, i, j)])
+                        if self.cubic == 1:
+                            self.formula.append([-self.merged_at[t][i], -self.merged_edge[t][j], self.tred(t, i, j)])
+                        elif self.cubic == 2:
+                            self.formula.append([-self.merge[t][i], -self.merged_edge[t][j], self.tred(t, i, j)])
 
     def encode_counters(self, g, d):
+        if self.sb_ord:
+            self.cardvars.append([])  # Start indexing from 0
         for t in range(1, len(g.nodes)-d):  # As last one is the root, no counter needed
+            # if self.cubic > 0 and t > 1:
+            #     vars = [self.merged_edge[t][j] for j in range(1, len(g.nodes) + 1)]
+            #     self.formula.extend(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
+
             for i in range(1, len(g.nodes) + 1):
                 vars = [self.tred(t, i, j) for j in range(1, len(g.nodes)+1) if i != j]
-                self.formula.extend(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
+                if self.sb_ord:
+                    form, cvars = tools.encode_cards_exact(self.pool, vars, d, f"cardvars_{t}_{i}")
+                    self.formula.extend(form)
+                    self.cardvars[t].append(cvars)
+                else:
+                    self.formula.extend(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=1))
 
     def encode(self, g, d, od=None, mg=None):
         g = self.remap_graph(g)
@@ -164,8 +229,10 @@ class TwinWidthEncoding2:
         self.encode_merge(n, d)
         self.encode_red(n, d, g)
         self.encode_counters(g, d)
-        self.sb(n, d)
-        self.sb_twohop(n, d, g, True)
+        if self.sb_ord:
+            self.encode_sb_order(n, d)
+        if self.twohop:
+            self.sb_twohop(n, d, g, False)
 
         return self.formula
 
@@ -182,7 +249,11 @@ class TwinWidthEncoding2:
                 if istc:
                     continue
 
-                self.formula.append([-self.ord[1][i], -self.merge[i][j]])
+                if self.cubic < 2:
+                    self.formula.append([-self.ord[1][i], -self.merge[i][j]])
+                else:
+                    self.formula.append([-self.ord[1][i], -self.merge[1][j]])
+
                 if not full:
                     continue
 
@@ -191,7 +262,10 @@ class TwinWidthEncoding2:
                         if k == i or k == j:
                             continue
 
-                        overall_clause = [-self.merge[i][j], -self.ord[t][i], self.tred(t-1, i, j)]
+                        if self.cubic < 2:
+                            overall_clause = [-self.merge[i][j], -self.ord[t][i], self.tred(t-1, i, j)]
+                        else:
+                            overall_clause = [-self.merge[t][j], -self.ord[t][i], self.tred(t - 1, i, j)]
 
                         if g.has_edge(i, k):
                             overall_clause.append(self.tred(t-1, j, k))
@@ -228,10 +302,11 @@ class TwinWidthEncoding2:
             with solver() as slv:
                 c_slv = slv
                 formula = self.encode(g, i, od, mg)
-                if verbose:
-                    print(f"Created encoding in {time.time() - start} {slv.nof_clauses()}/{slv.nof_vars()}")
 
                 slv.append_formula(formula)
+
+                if verbose:
+                    print(f"Created encoding in {time.time() - start} {slv.nof_clauses()}/{slv.nof_vars()}")
 
                 if done:
                     break
@@ -250,6 +325,7 @@ class TwinWidthEncoding2:
                     print(f"Finished cycle in {time.time() - start}")
         if timer is not None:
             timer.cancel()
+        print(f"Finished in {time.time() - start}")
         return cb
 
     def decode(self, model, g, d):
@@ -264,31 +340,34 @@ class TwinWidthEncoding2:
         od = []
         unordered = set(range(1, len(g.nodes)+1))
 
-        for i in range(1, len(g.nodes) + 1):
+        for t in range(1, len(g.nodes) - d):
             for j in range(1, len(g.nodes) + 1):
-                if model[self.ord[i][j]]:
-                    if len(od) >= i:
+                if model[self.ord[t][j]]:
+                    if len(od) >= t:
                         print("Double order")
                     od.append(j)
                     unordered.remove(j)
-            if len(od) < i:
+            if len(od) < t:
                 print("Order missing")
-            # if i < len(g.nodes) - d:
-            #     for c_node in od:
-            #         if not model[self.merged[c_node][i]]:
-            #             print(f"Not merged, node {c_node} step {i}")
-            #     for c_node in unordered:
-            #         if model[self.merged[c_node][i]]:
-            #             print(f"Merged, node {c_node} step {i}")
+
         if len(set(od)) < len(od):
             print("Node twice in order")
 
-        for i in range(1, len(g.nodes)):
-            for j in range(i+1, len(g.nodes) + 1):
-                if model[self.merge[i][j]]:
-                    if i in mg:
-                        print("Error, double merge!")
-                    mg[i] = j
+        if self.cubic < 2:
+            for i in range(1, len(g.nodes)):
+                for j in range(i+1, len(g.nodes) + 1):
+                    if model[self.merge[i][j]]:
+                        if i in mg:
+                            print("Error, double merge!")
+                        mg[i] = j
+        else:
+            for i in range(1, len(g.nodes)-d):
+                t = od[i-1]
+                for j in range(1, len(g.nodes) + 1):
+                    if model[self.merge[i][j]]:
+                        if t in mg:
+                            print("Error, double merge!")
+                        mg[t] = j
 
         # Perform contractions, last node needs not be contracted...
         for u, v in g.edges:
@@ -296,7 +375,7 @@ class TwinWidthEncoding2:
 
         c_max = 0
         step = 1
-        for n in od[:-d-1]:
+        for n in od:
             t = unmap[mg[n]]
             n = unmap[n]
             tn = set(g.neighbors(t))

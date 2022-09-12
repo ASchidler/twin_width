@@ -6,25 +6,23 @@ from pysat.formula import CNF, IDPool
 from threading import Timer
 from multiprocessing import Process, Manager
 import tools
-
+import encoding5, encoding
 
 class TwinWidthEncoding2:
-    def __init__(self, g, card_enc=EncType.totalizer, cubic=False, sb_ord=False, sb_merge=False):
+    def __init__(self, g, card_enc=EncType.totalizer):
         self.ord = None
         self.merge = None
         self.node_map = None
-        self.sb_ord = sb_ord
-        self.sb_merge = sb_merge
         self.pool = None
         self.formula = None
-        self.merged_edge = None
         self.totalizer = None
         self.g = g
         self.g_mapped = None
         self.cstep = 0
         self.card_enc = card_enc
         self.last_step = []
-        self.cubic = cubic
+        self.merged_with = None
+        self.merged_edge = None
 
     def remap_graph(self, g):
         self.node_map = {}
@@ -43,7 +41,7 @@ class TwinWidthEncoding2:
 
         return gn
 
-    def add_step(self, n, g, d, slv):
+    def add_step(self, n, g, d, slv, use_merge_sb=True, use_ord_sb=True):
         self.cstep += 1
 
         # Encode ordering
@@ -64,35 +62,25 @@ class TwinWidthEncoding2:
                 slv.add_clause([-self.ord[t][i], -self.ord[self.cstep][i]])
 
         # Merge constraint
-        if self.cubic:
+        for t in range(1, self.cstep):
             for i in range(1, n + 1):
-                self.merge[self.cstep][i] = self.pool.id(f"merge_{self.cstep}_{i}")
-            slv.append_formula(
-                CardEnc.atmost([self.merge[self.cstep][j] for j in range(1, n + 1)], bound=1, vpool=self.pool))
-            slv.append_formula(CardEnc.atleast([self.merge[self.cstep][j] for j in range(1, n + 1)], bound=1, vpool=self.pool))
-
-            for t in range(1, self.cstep):
-                for i in range(1, n + 1):
-                    slv.add_clause([-self.ord[t][i], -self.merge[self.cstep][i]])
-
-            for i in range(1, n + 1):
-                slv.add_clause([-self.ord[self.cstep][i], -self.merge[self.cstep][i]])
-        else:
-            for t in range(1, self.cstep):
-                for i in range(1, n + 1):
-                    for j in range(i + 1, n + 1):
-                        slv.add_clause([-self.ord[self.cstep][i], -self.merge[i][j], -self.ord[t][j]])
+                for j in range(i + 1, n + 1):
+                    slv.add_clause([-self.ord[self.cstep][i], -self.merge[i][j], -self.ord[t][j]])
 
         # Arcs
         for i in range(1, n + 1):
             for j in range(i+1, n+1):
                 self.red[self.cstep][i][j] = self.pool.id(f"red{self.cstep}_{i}_{j}")
 
-        if self.cstep > 1 and self.cubic:
-            for i in range(1, n + 1):
-                self.merged_edge[self.cstep][i] = self.pool.id(f"me{self.cstep}_{i}")
+        for i in range(1, n + 1):
+            self.merged_edge[self.cstep][i] = self.pool.id(f"me{self.cstep}_{i}")
+            self.merged_with[self.cstep][i] = self.pool.id(f"mw{self.cstep}_{i}")
 
+        if self.cstep > 1:
             for i in range(1, n + 1):
+                for j in range(i + 1, n + 1):
+                    slv.add_clause([-self.merge[i][j], -self.ord[self.cstep][i], self.merged_with[self.cstep][j]])
+
                 for k in range(1, n+1):
                     if k == i:
                         continue
@@ -100,10 +88,7 @@ class TwinWidthEncoding2:
 
         for i in range(1, n + 1):
             inb = set(g.neighbors(i))
-            for j in range(1 if self.cubic else i+1, n+1):
-                if i == j:
-                    continue
-
+            for j in range(i+1, n+1):
                 # Create red arcs
                 jnb = set(g.neighbors(j))
                 jnb.discard(i)
@@ -111,49 +96,31 @@ class TwinWidthEncoding2:
                 diff.discard(j)
 
                 for k in diff:
-                    if self.cubic:
-                        start = [-self.ord[self.cstep][i], -self.merge[self.cstep][j], self.tred(self.cstep, j, k)]
-                    else:
-                        start = [-self.ord[self.cstep][i], -self.merge[i][j], self.tred(self.cstep, j, k)]
+                    start = [-self.ord[self.cstep][i], -self.merge[i][j], self.tred(self.cstep, j, k)]
                     for t in range(1, self.cstep):
                         start.append(self.ord[t][k])
                     slv.add_clause(start)
 
-                # Transfer from merge source to merge target
-                if self.cstep > 1 and not self.cubic:
-                    for k in range(1, n + 1):
-                        if i == k or j == k:
-                            continue
-                        slv.add_clause([-self.ord[self.cstep][i], -self.merge[i][j], -self.tred(self.cstep-1, i, k), self.tred(self.cstep, j, k)])
-
+            # Maintain all other red arcs
             if self.cstep > 1:
-                # Maintain all other red arcs
                 for j in range(1, n+1):
                     if i == j:
                         continue
-                    if self.cubic:
-                        slv.add_clause([self.ord[self.cstep][i], self.ord[self.cstep][j], -self.tred(self.cstep - 1, i, j), self.tred(self.cstep, i, j)])
-                        slv.add_clause([-self.merge[self.cstep][i], -self.merged_edge[self.cstep][j], self.tred(self.cstep, i, j)])
-                        if self.sb_ord and i < j:
-                            slv.add_clause(
-                                [-self.tred(self.cstep, i, j), self.tred(self.cstep - 1, i, j), self.merge[self.cstep][j], self.merge[self.cstep][i]])
-                        if self.sb_ord and self.cstep == 2 and i < j:
-                            slv.add_clause([-self.tred(1, i, j), self.merge[1][j], self.merge[1][i]])
-                    else:
-                        slv.add_clause([self.ord[self.cstep][i], self.ord[self.cstep][j], -self.tred(self.cstep - 1, i, j), self.tred(self.cstep, i, j)])
+                    slv.add_clause([self.ord[self.cstep][i], self.ord[self.cstep][j], -self.tred(self.cstep - 1, i, j), self.tred(self.cstep, i, j)])
+                    slv.add_clause([-self.merged_with[self.cstep][i], -self.merged_edge[self.cstep][j], self.tred(self.cstep, i, j)])
 
         c_step_almosts = []
         for i in range(1, len(g.nodes) + 1):
             vars = [self.tred(self.cstep, i, j) for j in range(1, len(g.nodes) + 1) if i != j]
-            if self.sb_ord:
-                formula, cardvars = self.encode_cards_exact(vars, d, f"cardvars_{self.cstep}_{i}")
-                slv.append_formula(formula)
+            formula, cardvars = self.encode_cards_exact(vars, d, f"cardvars_{self.cstep}_{i}")
+            slv.append_formula(formula)
+            if use_ord_sb:
                 if d > 0:
                     c_step_almosts.append(cardvars[-2])
-            else:
-                slv.append_formula(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
+            # else:
+            #     slv.append_formula(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
 
-        if self.sb_ord:
+        if use_ord_sb:
             if self.cstep > 1 and d > 0:
                 for i in range(1, len(g.nodes) + 1):
                     for j in range(i + 1, len(g.nodes) + 1):
@@ -161,7 +128,7 @@ class TwinWidthEncoding2:
                         clause.extend([-self.ord[self.cstep-1][j], -self.ord[self.cstep][i]])
                         slv.add_clause(clause)
 
-        if self.sb_merge and not self.cubic:
+        if use_merge_sb:
             for i in range(1, len(g.nodes)):
             #     caux = self.pool.id(f"mergelim_{self.cstep}_{i}")
             #     clause = [caux]
@@ -182,12 +149,12 @@ class TwinWidthEncoding2:
         self.red = [[{} for _ in range(0, len(g.nodes) + 1)] for _ in range(0, len(g.nodes) + 1)]
         self.ord = [{} for _ in range(0, len(g.nodes) + 1)]
         self.merge = [{} for _ in range(0, len(g.nodes) + 1)]
+        self.merged_with = [{} for _ in range(0, len(g.nodes) + 1)]
         self.merged_edge = [{} for _ in range(0, len(g.nodes) + 1)]
 
-        if not self.cubic:
-            for i in range(1, len(g.nodes)+1):
-                for j in range(i+1, len(g.nodes)+1):
-                    self.merge[i][j] = self.pool.id(f"merge{i}_{j}")
+        for i in range(1, len(g.nodes)+1):
+            for j in range(i+1, len(g.nodes)+1):
+                self.merge[i][j] = self.pool.id(f"merge{i}_{j}")
 
     def encode_merge(self, n, use_merge_sb=True):
         for i in range(1, n):
@@ -210,8 +177,7 @@ class TwinWidthEncoding2:
         self.pool = IDPool()
         self.formula = CNF()
         self.init_var(g)
-        if not self.cubic:
-            self.encode_merge(n, use_merge_sb)
+        self.encode_merge(n, use_merge_sb)
 
         return self.formula
 
@@ -253,7 +219,7 @@ class TwinWidthEncoding2:
                             slv.add_clause([-cv])
                         self.last_step.clear()
 
-                    self.add_step(len(g.nodes), self.g_mapped, lb, slv)
+                    self.add_step(len(g.nodes), self.g_mapped, lb, slv, use_merge_sb, use_ord_sb)
                     # self.sb_twohop(len(g.nodes), self.g_mapped, slv, True)
                     if verbose:
                         print(f"Bound: {lb}, Step: {self.cstep} {slv.nof_clauses()}/{slv.nof_vars()}")
