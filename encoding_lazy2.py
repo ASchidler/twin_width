@@ -10,7 +10,7 @@ import tools
 
 
 class TwinWidthEncoding2:
-    def __init__(self, g, card_enc=EncType.mtotalizer, cubic=False, sb_ord=False, sb_merge=False, sb_static=sys.maxsize):
+    def __init__(self, g, card_enc=EncType.mtotalizer, cubic=False, sb_ord=False, sb_merge=False, sb_static=sys.maxsize, sb_red=False):
         self.ord = None
         self.merge = None
         self.node_map = None
@@ -27,8 +27,10 @@ class TwinWidthEncoding2:
         self.last_step = []
         self.cubic = cubic
         self.cv = [[] for _ in range(0, len(g.nodes))]
-        self.sb_static = 0
+        self.sb_static = sb_static
         self.initials = {}
+        self.merged = None
+        self.sb_red = sb_red
 
     def remap_graph(self, g):
         self.node_map = {}
@@ -152,7 +154,7 @@ class TwinWidthEncoding2:
         for i in range(1, len(g.nodes) + 1):
             vars = [self.tred(self.cstep, i, j) for j in range(1, len(g.nodes) + 1) if i != j]
             if self.sb_ord:
-                formula, cardvars = self.encode_cards_exact(vars, d, f"cardvars_{self.cstep}_{i}")
+                formula, cardvars = tools.encode_cards_exact(self.pool, vars, d, f"cardvars_{self.cstep}_{i}")
                 slv.append_formula(formula)
                 if d > 0:
                     c_step_almosts.append(cardvars[-2])
@@ -193,29 +195,74 @@ class TwinWidthEncoding2:
                 slv.add_clause(mclause)
 
         if self.sb_static > 0:
-            for (n1, n2), sd in self.initials:
+            self.merged[self.cstep] = [None if i == 0 else self.pool.id(f"merged_{self.cstep}_{i}") for i in
+                                       range(0, len(g.nodes) + 1)]
+            for i in range(1, len(g.nodes) + 1):
+                slv.add_clause([-self.ord[self.cstep][i], self.merged[self.cstep][i]])
+                if self.cstep == 1:
+                    slv.add_clause([self.ord[self.cstep][i], -self.merged[self.cstep][i]])
+                else:
+                    slv.add_clause([-self.merged[self.cstep - 1][i], self.merged[self.cstep][i]])
+
+            for (n1, n2), sd in self.initials.items():
                 if self.cstep < len(sd) - d:
                     if self.cubic:
                         slv.add_clause([-self.ord[self.cstep][n1], -self.merge[self.cstep][n2]])
                     else:
                         slv.add_clause([-self.ord[self.cstep][n1], -self.merge[n1][n2]])
                 elif self.cstep < self.sb_static:
-                    if self.cubic:
-                        cl = [-self.ord[self.cstep][n1], -self.merge[self.cstep][n2]]
+                    if len(sd) - d > 1:
+                        lits = [-self.merged[self.cstep][x] for x in sd]
+                        form, cards = tools.encode_cards_exact(self.pool, lits, len(sd)-d, f"static_{self.cstep}_{n1}_{n2}", False)
+                        slv.append_formula(form)
+
+                        if self.cubic:
+                            slv.add_clause([-self.ord[self.cstep][n1], -self.merge[self.cstep][n2], -cards[len(sd)-d]])
+                        else:
+                            slv.add_clause([-self.ord[self.cstep][n1], -self.merge[n1][n2], -cards[len(sd)-d]])
                     else:
-                        cl = [-self.ord[self.cstep][n1], -self.merge[n1][n2]]
+                        if self.cubic:
+                            cl = [-self.ord[self.cstep][n1], -self.merge[self.cstep][n2]]
+                        else:
+                            cl = [-self.ord[self.cstep][n1], -self.merge[n1][n2]]
 
-                    for t2 in range(1, self.cstep):
-                        for n in sd:
-                            cl.append(self.ord[t2][n])
-                    slv.add_clause(cl)
+                        for t2 in range(1, self.cstep):
+                            for i in sd:
+                                cl.append(self.ord[t2][i])
+                        slv.add_clause(cl)
 
+        if self.sb_red:
+            self.merged[self.cstep] = [None if i == 0 else self.pool.id(f"merged_{self.cstep}_{i}") for i in range(0, len(g.nodes) + 1)]
+            for i in range(1, len(g.nodes) + 1):
+                slv.add_clause([-self.ord[self.cstep][i], self.merged[self.cstep][i]])
+                if self.cstep == 1:
+                    slv.add_clause([self.ord[self.cstep][i], -self.merged[self.cstep][i]])
+                else:
+                    slv.add_clause([-self.merged[self.cstep-1][i], self.merged[self.cstep][i]])
+
+                for j in range(1, len(g.nodes) + 1):
+                    if i != j:
+                        slv.add_clause([-self.merged[self.cstep][i], -self.tred(self.cstep, i, j)])
+
+            # if self.sb_static:
+            #     for (n1, n2), sd in self.initials.items():
+            #         if self.cstep >= len(sd) - d and self.cstep < self.sb_static:
+            #             lits = [-self.merged[self.cstep][x] for x in sd]
+            #             form, cards = tools.encode_cards_exact(self.pool, lits, len(sd)-d, f"static_{self.cstep}_{n1}_{n2}", False)
+            #             slv.append_formula(form)
+            #
+            #             if self.cubic:
+            #                 slv.add_clause([-self.ord[self.cstep][n1], -self.merge[self.cstep][n2], cards[len(sd)-d]])
+            #             else:
+            #                 slv.add_clause([-self.ord[self.cstep][n1], -self.merge[n1][n2], cards[len(sd)-d]])
     def init_var(self, g, d):
         self.cstep = 0
         self.red = [[{} for _ in range(0, len(g.nodes) + 1)] for _ in range(0, len(g.nodes) + 1)]
         self.ord = [{} for _ in range(0, len(g.nodes) + 1)]
         self.merge = [{} for _ in range(0, len(g.nodes) + 1)]
         self.merged_edge = [{} for _ in range(0, len(g.nodes) + 1)]
+        self.merged = [{} for _ in range(0, len(g.nodes) + 1)]
+        self.initials = {}
 
         if not self.cubic:
             for i in range(1, len(g.nodes)+1):
@@ -262,7 +309,6 @@ class TwinWidthEncoding2:
 
     def run(self, g, solver, start_bound, verbose=True, check=True, timeout=0):
         use_merge_sb = False
-        use_ord_sb = False
         start = time.time()
         cb = start_bound
 
@@ -299,7 +345,7 @@ class TwinWidthEncoding2:
                         self.last_step.clear()
 
                     self.add_step(len(g.nodes), self.g_mapped, lb, slv)
-                    # self.sb_twohop(len(g.nodes), self.g_mapped, slv, True)
+                    self.sb_twohop(len(g.nodes), self.g_mapped, slv, True)
                     if verbose:
                         print(f"Bound: {lb}, Step: {self.cstep} {slv.nof_clauses()}/{slv.nof_vars()}")
 
@@ -338,7 +384,7 @@ class TwinWidthEncoding2:
                     continue
 
                 if self.cstep == 1:
-                    self.formula.append([-self.ord[1][i], -self.merge[i][j]])
+                    self.formula.append([-self.ord[1][i], -self.merge[i][j] if not self.cubic else -self.merge[1][j]])
                 if not full or self.cstep == 1:
                     continue
 
@@ -346,7 +392,7 @@ class TwinWidthEncoding2:
                     if k == i or k == j:
                         continue
 
-                    overall_clause = [-self.merge[i][j], -self.ord[self.cstep][i], self.tred(self.cstep-1, i, j)]
+                    overall_clause = [-self.merge[i][j] if not self.cubic else -self.merge[self.cstep][j], -self.ord[self.cstep][i], self.tred(self.cstep-1, i, j)]
 
                     if g.has_edge(i, k):
                         overall_clause.append(self.tred(self.cstep - 1, j, k))
@@ -437,34 +483,3 @@ class TwinWidthEncoding2:
             step += 1
         print(f"Done {c_max}/{d}")
         return c_max, od, mg
-
-    def encode_cards_exact(self, lits, bound, name):
-        matrix = [[self.pool.id(f"{name}_{x}_{y}") for y in range(0, bound+1)] for x in range(0, len(lits))]
-        form = CNF()
-        # Propagate up
-        for cb in range(0, bound+1):
-            for cr in range(0, len(lits)-1):
-                pass
-                form.append([-matrix[cr][cb], matrix[cr+1][cb]])
-
-        for cr in range(0, len(lits)):
-            form.append([-lits[cr], matrix[cr][0]])
-            if cr == 0:
-                form.append([-matrix[cr][0], lits[cr]])
-            else:
-                form.append([-matrix[cr][0], lits[cr], matrix[cr-1][0]])
-
-            if cr > 0:
-                for cb in range(0, bound):
-                    form.append([-lits[cr], -matrix[cr-1][cb], matrix[cr][cb+1]])
-                    form.append([-matrix[cr][cb + 1], matrix[cr][cb]])
-
-                    if cr == 0:
-                        form.append([-matrix[cr][cb+1], lits[cr]])
-                    else:
-                        form.append([-matrix[cr][cb+1], lits[cr], matrix[cr-1][cb+1]])
-
-        for cr  in range(0, len(lits)):
-            form.append([-matrix[cr][bound]])
-
-        return form, matrix[-1]

@@ -532,15 +532,15 @@ def solve_quick_(adj, nbs, contracted, od, mg, ub, counts):
 def encode_card_0(lits, form):
     for cl in lits:
         form.append([-cl])
-def encode_cards_exact(pool, lits, bound, name):
+def encode_cards_exact(pool, lits, bound, name, add_constraint=True):
     matrix = [[pool.id(f"{name}_{x}_{y}") for y in range(0, bound+1)] for x in range(0, len(lits))]
     form = CNF()
     if bound >= len(lits):
-        return form
+        return form, []
 
     if bound == 0:
         encode_card_0(lits, form)
-        return form
+        return form, []
 
     # Propagate up
     for cb in range(0, bound+1):
@@ -565,8 +565,9 @@ def encode_cards_exact(pool, lits, bound, name):
                 else:
                     form.append([-matrix[cr][cb+1], lits[cr], matrix[cr-1][cb+1]])
 
-    for cr in range(0, len(lits)):
-        form.append([-matrix[cr][bound]])
+    if add_constraint:
+        for cr in range(0, len(lits)):
+            form.append([-matrix[cr][bound]])
 
     return form, matrix[-1]
 
