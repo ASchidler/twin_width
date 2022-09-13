@@ -9,7 +9,7 @@ import tools
 
 
 class TwinWidthEncoding2:
-    def __init__(self, g, card_enc=EncType.mtotalizer, cubic=0, sb_ord=False, twohop=False, sb_static=sys.maxsize):
+    def __init__(self, g, card_enc=EncType.mtotalizer, cubic=0, sb_ord=False, twohop=False, sb_static=sys.maxsize, sb_static_full=False):
         self.ord = None
         self.merge = None
         self.merged_edge = None
@@ -25,6 +25,8 @@ class TwinWidthEncoding2:
         self.sb_ord = sb_ord
         self.twohop = twohop
         self.sb_static = sb_static
+        self.sb_static_full = sb_static_full
+        self.static_card = None
 
     def remap_graph(self, g):
         self.node_map = {}
@@ -48,6 +50,7 @@ class TwinWidthEncoding2:
         self.ord = [{} for _ in range(0, len(g.nodes) + 1)]
         self.merge = [{} for _ in range(0, len(g.nodes) + 1)]
         self.cardvars = [[] for _ in range(0, len(g.nodes) + 1)]
+        self.static_card = [{} for _ in range(0, len(g.nodes) + 1)]
 
         if self.cubic < 2:
             for i in range(1, len(g.nodes)+1):
@@ -159,22 +162,54 @@ class TwinWidthEncoding2:
                 sd.discard(n2)
 
                 if len(sd) > d:
+                    if self.sb_static_full:
+                        lits = [self.pool.id(f"static_st_{n1}_{cn}") for cn in sd]
+                        form, cards = tools.encode_cards_exact(self.pool, lits, d, f"static_full_{n1}_{n2}",
+                                                               add_constraint=False)
+                        self.formula.extend(form)
+                        self.static_card[n1][n2] = cards
+
+                        if self.cubic < 2 and d > 0:
+                            self.formula.append([-self.merge[n1][n2], -self.static_card[n1][n2][d]])
+
+                        for t in range(1, min(n-d, self.sb_static)):
+                            for cn in sd:
+                                cl = [self.pool.id(f"static_st_{n1}_{cn}"), -self.ord[t][n1]]
+                                for t2 in range(1, t):
+                                    cl.append(self.ord[t2][cn])
+
+                                self.formula.append(cl)
+
                     for t in range(1, len(sd)-d):
                         if self.cubic == 2:
-                            self.formula.append([-self.ord[t][n1], -self.merge[t][n2]])
-                        else:
-                            self.formula.append([-self.ord[t][n1], -self.merge[n1][n2]])
+                            self.formula.append([-self.ord[t][n1], -self.merge[t if self.cubic == 2 else n1][n2]])
 
                     for t in range(len(sd)-1, min(n-d, self.sb_static)):
-                        if self.cubic == 2:
-                            cl = [-self.ord[t][n1], -self.merge[t][n2]]
-                        else:
-                            cl = [-self.ord[t][n1], -self.merge[n1][n2]]
+                        if len(sd) - d > 1 and self.sb_static_full:
+                            if self.cubic == 2:
+                                if not self.cubic:
+                                    self.formula.append(
+                                        [-self.ord[t][n1], -self.merge[t][n2], -self.static_card[n1][n2][d]])
 
-                        for t2 in range(1, t):
-                            for i in sd:
-                                cl.append(self.ord[t2][i])
-                        self.formula.append(cl)
+                                    for cd in range(1, d):
+                                        if cd > 1:
+                                            # There might be a red edge between i and j and some other node that might be contracted away, so + 1
+                                            self.formula.append([-self.ord[t][n1],
+                                                            -self.merge[t][n2],
+                                                            -self.cardvars[t - 1][n2-1][cd]
+                                                            -self.static_card[n1][n2][d - cd]])
+                                        self.formula.append([-self.ord[t][n1],
+                                                        -self.merge[t][n2],
+                                                        self.tred(t - 1, n1, n2)
+                                                        -self.cardvars[t - 1][n2-1][cd]
+                                                        -self.static_card[n1][n2][d - cd - 1]])  # Substract 1 as cardvars[d] expresses that d is exceeded!
+                        else:
+                            cl = [-self.ord[t][n1], -self.merge[t if self.cubic == 2 else n1][n2]]
+
+                            for t2 in range(1, t):
+                                for i in sd:
+                                    cl.append(self.ord[t2][i])
+                            self.formula.append(cl)
     def tred(self, t, i, j):
         if i < j:
             return self.red[t][i][j]
@@ -240,7 +275,7 @@ class TwinWidthEncoding2:
 
             for i in range(1, len(g.nodes) + 1):
                 vars = [self.tred(t, i, j) for j in range(1, len(g.nodes)+1) if i != j]
-                if self.sb_ord:
+                if self.sb_ord or (self.sb_static and self.sb_static_full):
                     form, cvars = tools.encode_cards_exact(self.pool, vars, d, f"cardvars_{t}_{i}")
                     self.formula.extend(form)
                     self.cardvars[t].append(cvars)

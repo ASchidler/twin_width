@@ -532,9 +532,11 @@ def solve_quick_(adj, nbs, contracted, od, mg, ub, counts):
 def encode_card_0(lits, form):
     for cl in lits:
         form.append([-cl])
-def encode_cards_exact(pool, lits, bound, name, add_constraint=True):
+
+
+def encode_cards_exact(pool, lits, bound, name, rev=True, add_constraint=True):
     matrix = [[pool.id(f"{name}_{x}_{y}") for y in range(0, bound+1)] for x in range(0, len(lits))]
-    form = CNF()
+    form = [] # CNF()
     if bound >= len(lits):
         return form, []
 
@@ -545,7 +547,6 @@ def encode_cards_exact(pool, lits, bound, name, add_constraint=True):
     # Propagate up
     for cb in range(0, bound+1):
         for cr in range(0, len(lits)-1):
-            pass
             form.append([-matrix[cr][cb], matrix[cr+1][cb]])
 
     for cr in range(0, len(lits)):
@@ -560,10 +561,11 @@ def encode_cards_exact(pool, lits, bound, name, add_constraint=True):
                 form.append([-lits[cr], -matrix[cr-1][cb], matrix[cr][cb+1]])
                 form.append([-matrix[cr][cb + 1], matrix[cr][cb]])
 
-                if cr == 0:
-                    form.append([-matrix[cr][cb+1], lits[cr]])
-                else:
-                    form.append([-matrix[cr][cb+1], lits[cr], matrix[cr-1][cb+1]])
+                if rev:
+                    if cr == 0:
+                        form.append([-matrix[cr][cb+1], lits[cr]])
+                    else:
+                        form.append([-matrix[cr][cb+1], lits[cr], matrix[cr-1][cb+1]])
 
     if add_constraint:
         for cr in range(0, len(lits)):

@@ -50,6 +50,7 @@ if instance.endswith(".cnf"):
 else:
     # g = parser.parse(instance)[0]
     g = tools.prime_paley(29)
+    g = grid_2d_graph(6, 6)
     # g = tools.prime_square_paley(9)
 
     print(f"{len(g.nodes)} {len(g.edges)}")
@@ -66,9 +67,9 @@ else:
     ub = min(ub, ub2)
 
     start = time.time()
-    enc = encoding.TwinWidthEncoding()
+    enc = encoding.TwinWidthEncoding(use_sb_static=True, use_sb_static_full=True)
     # enc = lazy.TwinWidthEncoding()
-    enc = encoding2.TwinWidthEncoding2(g, cubic=2)
+    # enc = encoding2.TwinWidthEncoding2(g, cubic=2)
     # enc = lazy2.TwinWidthEncoding2(g, cubic=False)
     cb = enc.run(g, slv.Cadical, ub)
 

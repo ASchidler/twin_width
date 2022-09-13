@@ -9,13 +9,18 @@ import time
 
 # TODO: Symmetry breaking: If two consecutive contractions have to node with red edges in common -> lex order
 class TwinWidthEncoding:
-    def __init__(self):
+    def __init__(self, use_sb_static=True, use_sb_static_full=True, use_sb_red=False):
         self.edge = None
         self.ord = None
         self.merge = None
         self.node_map = None
         self.pool = IDPool()
         self.totalizer = None
+        self.static_cards = None
+        self.initial = None
+        self.use_sb_static = use_sb_static
+        self.use_sb_static_full = use_sb_static_full
+        self.use_sb_red = use_sb_red
 
     def remap_graph(self, g):
         self.node_map = {}
@@ -38,6 +43,9 @@ class TwinWidthEncoding:
         self.edge = [[{} for _ in range(0, len(g.nodes) + 1)]  for _ in range(0, len(g.nodes) + 1)]
         self.ord = [{} for _ in range(0, len(g.nodes) + 1)]
         self.merge = [{} for _ in range(0, len(g.nodes) + 1)]
+        self.static_cards = [{} for _ in range(0, len(g.nodes) + 1)]
+        self.initial = [{} for _ in range(0, len(g.nodes) + 1)]
+        self.static_cards = [{} for _ in range(0, len(g.nodes) + 1)]
 
         for i in range(1, len(g.nodes) + 1):
             for j in range(i + 1, len(g.nodes) + 1):
@@ -45,6 +53,16 @@ class TwinWidthEncoding:
                     self.edge[k][i][j] = self.pool.id(f"edge{k}_{i}_{j}")
                 self.ord[i][j] = self.pool.id(f"ord{i}_{j}")
                 self.merge[i][j] = self.pool.id(f"merge{i}_{j}")
+
+        if self.use_sb_static:
+            for i in range(1, len(g.nodes) + 1):
+                n1nb = set(g.neighbors(i))
+                for j in range(i + 1, len(g.nodes) + 1):
+                    n2nb = set(g.neighbors(j))
+                    sd = n1nb ^ n2nb
+                    sd.discard(i)
+                    sd.discard(j)
+                    self.initial[i][j] = sd
 
     def tord(self, i, j):
         if i < j:
@@ -120,12 +138,17 @@ class TwinWidthEncoding:
                 if i == x:
                     continue
                 vars = [self.tedge(i, x, y) for y in range(1, len(g.nodes)+1) if x != y]
+                # TODO: store card vars to make it interchangable?
                 self.totalizer[i][x] = ITotalizer(vars, ubound=d, top_id=self.pool.id(f"totalizer{i}_{x}"))
                 formula.extend(self.totalizer[i][x].cnf)
                 self.pool.occupy(self.pool.top-1, self.totalizer[i][x].top_id)
 
         self.sb_ord(n, formula)
         self.sb_reds(n, formula)
+        self.sb_static(d, formula)
+        if self.use_sb_red:
+            self.sb_reds(n, formula)
+
         return formula
 
     def run(self, g, solver, start_bound, verbose=True, check=True, lb=0, od=None, mg=None):
@@ -144,12 +167,20 @@ class TwinWidthEncoding:
                     print(f"{slv.nof_clauses()}/{slv.nof_vars()}")
                 for cv in self.get_card_vars(i):
                     slv.add_clause([cv])
-                if slv.solve():#(assumptions=self.get_card_vars(i)):
-                    cb = i
+
+                if self.use_sb_static and self.use_sb_static_full:
+                    for n1, vl in enumerate(self.static_cards):
+                        for n2, cards in vl.items():
+                            slv.add_clause([-self.merge[n1][n2], -cards[i]])
+
+                if slv.solve():
                     if verbose:
                         print(f"Found {i}")
                     if check:
                         mx, od, mg = self.decode(slv.get_model(), g, i, verbose)
+                    if self.use_sb_static and self.use_sb_static_full:
+                        self.sb_static(i, None, cb, slv)
+                    cb = i
                 else:
                     if verbose:
                         print(f"Failed {i}")
@@ -242,6 +273,28 @@ class TwinWidthEncoding:
     def sb_ord(self, n, formula):
         for i in range(1, n):
             formula.append([self.ord[i][n]])
+
+    def sb_static(self, d, form, old_d=None, slv=None):
+        for i, vl in enumerate(self.initial):
+            for j, sd in vl.items():
+                if len(sd) > d:
+                    if (len(sd) - d > 1 and (old_d is None or len(sd) - old_d <= 1)) and self.use_sb_static_full:
+                        lits = [self.tord(i, x) for x in sd]
+                        cform, cards = tools.encode_cards_exact(self.pool, lits, d, f"static_{i}_{j}", rev=True, add_constraint=False)
+                        if slv is None:
+                            form.extend(cform)
+                        else:
+                            slv.append_formula(cform)
+
+                        self.static_cards[i][j] = cards
+                    elif old_d is None or len(sd) <= old_d:
+                        cl = [-self.merge[i][j]]
+                        for x in sd:
+                            cl.append(self.tord(x, i))
+                        if slv is None:
+                            form.append(cl)
+                        else:
+                            slv.add_clause(cl)
 
     def decode(self, model, g, d, verbose=False):
         g = g.copy()
