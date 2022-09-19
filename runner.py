@@ -8,9 +8,8 @@ import networkx
 import pysat.solvers as slv
 
 import encoding as encoding
-import encoding_lazy as lazy
-import encoding_lazy2 as lazy2
 import encoding2 as encoding2
+import encoding_lazy2 as lazy2
 
 import encoding_signed_bipartite
 import heuristic
@@ -21,8 +20,36 @@ from networkx.generators.lattice import grid_2d_graph
 from networkx.generators.random_graphs import gnp_random_graph
 import resource
 import treewidth
+import argparse as argp
 
-resource.setrlimit(resource.RLIMIT_AS, (16 * 1024 * 1024 * 1024, 16 * 1024 * 1024 * 1024))
+
+ap = argp.ArgumentParser(description="Python implementation for computing and improving decision trees.")
+ap.add_argument("instance", type=str)
+ap.add_argument("-e", dest="encoding", action="store", default=0, choices=[0, 1, 2], type=int,
+                help="The encoding to use (0=Relative, 1=Absolute, 2=Absolute Incremental")
+ap.add_argument("-c", dest="cubic", action="store_true", default=False,
+                help="Cubic mode, reduces the number of clauses from n^4 to n^3 (only available for absolute encodings)"
+                )
+ap.add_argument("-t", dest="contraction", action="store_true", default=False,
+                help="Use contraction hints.")
+ap.add_argument("-f", dest="contraction_full", action="store_true", default=False,
+                help="Use full contraction symmetry hints (requires -t).")
+ap.add_argument("-l", dest="contraction_limit", action="store", default=sys.maxsize, type=int,
+                help="Limit the number of contractions for which contraction hints are used (only available for absolute encodings)"
+                )
+ap.add_argument("-o", dest="order", action="store_true", default=False,
+                help="Use order symmetry breaking (only available for absolute encodings).")
+ap.add_argument("-d", dest="draw", action="store_true", default=False,
+                help="Draw the contraction steps (uses dot).")
+ap.add_argument("-v", dest="verbose", action="store_true", default=False,
+                help="Verbose mode.")
+ap.add_argument("-m", dest="memory", action="store", default=0, type=int,
+                help="Limit maximum memory usage in GB, useful to avoid memouts when testing.")
+
+args = ap.parse_args()
+
+if args.memory > 0:
+    resource.setrlimit(resource.RLIMIT_AS, (args.memory * 1024 * 1024 * 1024, args.memory * 1024 * 1024 * 1024))
 
 #print(f"{tools.solve_grid2(7,7, 3)}")
 
@@ -30,9 +57,6 @@ instance = sys.argv[-1]
 print(instance)
 issat = False
 
-output_graphs = False
-if any(x == "-l" for x in sys.argv[1:-1]):
-    output_graphs = True
 
 if instance.endswith(".cnf"):
     issat = True
@@ -48,9 +72,9 @@ if instance.endswith(".cnf"):
         enc = encoding_signed_bipartite.TwinWidthEncoding()
         cb = enc.run(g, slv.Cadical, ub)
 else:
-    # g = parser.parse(instance)[0]
-    g = tools.prime_paley(29)
-    g = grid_2d_graph(6, 6)
+    g = parser.parse(args.instance)[0]
+    # g = tools.prime_paley(29)
+    # g = grid_2d_graph(6, 6)
     # g = tools.prime_square_paley(9)
 
     print(f"{len(g.nodes)} {len(g.edges)}")
@@ -67,15 +91,22 @@ else:
     ub = min(ub, ub2)
 
     start = time.time()
-    enc = encoding.TwinWidthEncoding(use_sb_static=True, use_sb_static_full=True)
+    if args.encoding == 0:
+        enc = encoding.TwinWidthEncoding(use_sb_static=args.contraction, use_sb_static_full=args.contraction_full)
+    elif args.encoding == 1:
+        enc = encoding2.TwinWidthEncoding2(g, sb_ord=args.order, sb_static=0 if not args.contraction else args.contraction_limit, sb_static_full=args.contraction_full,
+                                           cubic=2 if args.cubic else 0)
+    else:        
+        enc = lazy2.TwinWidthEncoding2(g, sb_ord=args.order, sb_static=0 if not args.contraction else args.contraction_limit, use_sb_static_full=args.contraction_full)
     # enc = lazy.TwinWidthEncoding()
     # enc = encoding2.TwinWidthEncoding2(g, cubic=2)
     # enc = lazy2.TwinWidthEncoding2(g, cubic=False)
-    cb = enc.run(g, slv.Cadical, ub)
+    cb = enc.run(g, slv.Cadical, ub, verbose=args.verbose)
 
-print(f"Finished, result: {cb}")
+print(f"Finished")
+print(f"{cb}")
 
-if output_graphs:
+if args.draw:
     instance_name = os.path.split(instance)[-1]
     mg = cb[2]
     for u, v in g.edges:

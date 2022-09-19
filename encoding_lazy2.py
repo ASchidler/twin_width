@@ -207,7 +207,7 @@ class TwinWidthEncoding2:
                     else:
                         slv.add_clause([-self.merged[self.cstep - 1][u], self.merged[self.cstep][u]])
 
-        if self.sb_static > 0:
+        if self.sb_static > 0 and d > 0:
             for (n1, n2), sd in self.initials.items():
                 if self.sb_static_full and self.cstep < self.sb_static and len(sd) - d > 1:
                     if self.cstep == 1:
@@ -483,6 +483,5 @@ class TwinWidthEncoding2:
                     print(f"Exceeded bound in step {step}")
                 c_max = max(c_max, cc)
 
-            step += 1
-        print(f"Done {c_max}/{d}")
+            step += 1        
         return c_max, od, mg

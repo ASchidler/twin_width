@@ -132,7 +132,7 @@ class TwinWidthEncoding:
 
         # Encode counters
         self.totalizer = {}
-        for i in range(1, len(g.nodes)): # As last one is the root, no counter needed
+        for i in range(1, len(g.nodes)): # At last one is the root, no counter needed
             self.totalizer[i] = {}
             for x in range(1, len(g.nodes) + 1):
                 if i == x:
@@ -151,9 +151,9 @@ class TwinWidthEncoding:
 
         return formula
 
-    def run(self, g, solver, start_bound, verbose=True, check=True, lb=0, od=None, mg=None):
+    def run(self, g, solver, start_bound, verbose=True, check=True, lb=0, i_od=None, i_mg=None):
         start = time.time()
-        formula = self.encode(g, start_bound, od, mg)
+        formula = self.encode(g, start_bound, i_od, i_mg)
         cb = start_bound
 
         if verbose:

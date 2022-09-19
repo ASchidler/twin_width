@@ -533,7 +533,6 @@ def encode_card_0(lits, form):
     for cl in lits:
         form.append([-cl])
 
-
 def encode_cards_exact(pool, lits, bound, name, rev=True, add_constraint=True):
     matrix = [[pool.id(f"{name}_{x}_{y}") for y in range(0, bound+1)] for x in range(0, len(lits))]
     form = [] # CNF()

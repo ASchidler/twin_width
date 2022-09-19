@@ -1,17 +1,38 @@
-This is the code for computing the twin-width of graphs.
+This is the code for computing the twin-width of graphs, see our paper "A SAT approach to twin-width" for more details (https://epubs.siam.org/doi/abs/10.1137/1.9781611977042.6)
+This is an updated version, particularly the absolute encoding performs much better, see parameter description below for details.
 
 We used Python 3.8, PySAT 1.6.0 and networkx 2.5
 
 The project can be run by using:
 python runner.py <path-to-instance-in-dimacs-format>
 
-The project contains the following files, except the runner:
-encoding.py - Contains the relative encoding
-encoding2.py - Contains the absolute encoding (using this encoding requires changing the comments in runner.py)
-heuristic.py - Contains the code to compute the upper bound
-preprocessing.py - Contains the only preprocessing we do - twin merge
-tools.py - This file contains many helper functions, including module computation, consistency checks and code
-to generate some named graphs.
+If a solution is found, the last line contains a tuple (tww, od, mg) where
+tww is an integer denoting the twin-width,
+od is the order in which the nodes are contracted
+mg is a mapping which node (in od) is contracted with which other node, where the node in od is then removed, and the target node im mg remains.
 
-The folder bin contains the nauty binary.
-The folder experiments contains the code to run different experiments and extract the results, as well as the instances.
+When absolute encodings are used, od will not contain all nodes, as the last tww+1 steps do not matter, these
+nodes are omitted.
+
+Since we use networkx, the file parser.py can easily be adapted to read whatever input format is preferred.
+
+The following parameters are accepted:
+"-e <0-2>" chooses the encoding among relative, absolute, and absolute incremental
+The incremental is good for establishing lower bounds.
+
+"-v" enables verbose mode and gives more details.
+
+"-m <value>" limits the memory the maximum memory usage to value GB, useful for testing.
+
+"-d" draw the contraction sequence using dot/graphviz, requires dot in the path.
+
+The following arguments enable specific improvements/symmetry breakings that can or cannot improve the runtime.
+Which settings perform well is very instance dependent.
+
+"-c" enables cubic mode, which reduces the number of clauses in the absolute (incremental) encoding.
+
+"-t" enables contraction hints that give the solver information about contractions that will exceed the current bound.
+"-f" enables full contraction hints (requires -t), which add even more information.
+"-l value" adds a limit on the number of contractions the hints are used for (absolute encodings only). Since usually the hints are less useful in later contractions, this can boost performance.
+
+"-o" enables order symmetry breaking (absolute encodings only).

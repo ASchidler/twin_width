@@ -45,7 +45,7 @@ class TwinWidthEncoding2:
 
         return gn
 
-    def init_var(self, g, d):
+    def init_var(self, g, steps):
         self.red = [[{} for _ in range(0, len(g.nodes) + 1)] for _ in range(0, len(g.nodes) + 1)]
         self.ord = [{} for _ in range(0, len(g.nodes) + 1)]
         self.merge = [{} for _ in range(0, len(g.nodes) + 1)]
@@ -58,30 +58,30 @@ class TwinWidthEncoding2:
                     self.merge[i][j] = self.pool.id(f"merge{i}_{j}")
             if self.cubic == 1:
                 self.merged_at = [{} for _ in range(0, len(g.nodes) + 1)]
-                for t in range(2, len(g.nodes) - d):
+                for t in range(2, steps):
                     for j in range(1, len(g.nodes) + 1):
                         self.merged_at[t][j] = self.pool.id(f"ma{t}_{j}")
         else:
-            for t in range(1, len(g.nodes) - d):
+            for t in range(1, steps):
                 for j in range(1, len(g.nodes)+1):
                     self.merge[t][j] = self.pool.id(f"merge{t}_{j}")
 
         if self.cubic > 0:
             self.merged_edge = [{} for _ in range(0, len(g.nodes) + 1)]
-            for t in range(2, len(g.nodes) - d):
+            for t in range(2, steps):
                 for j in range(1, len(g.nodes)+1):
                     self.merged_edge[t][j] = self.pool.id(f"me{t}_{j}")
 
-        for t in range(1, len(g.nodes) - d):
+        for t in range(1, steps):
             for i in range(1, len(g.nodes) + 1):
                 self.ord[t][i] = self.pool.id(f"ord{t}_{i}")
 
                 for j in range(i + 1, len(g.nodes) + 1):
                     self.red[t][i][j] = self.pool.id(f"red{t}_{i}_{j}")
 
-    def encode_order(self, n, d):
+    def encode_order(self, n, steps):
         # Assign one node to each time step
-        for t in range(1, n-d):
+        for t in range(1, steps):
             self.formula.append([-self.ord[t][n]])
             self.formula.append([-self.ord[t][n - 1]])
             self.formula.extend(
@@ -91,9 +91,9 @@ class TwinWidthEncoding2:
         # Make sure each node is assigned only once...
         for i in range(1, n + 1):
             self.formula.extend(
-                CardEnc.atmost([self.ord[t][i] for t in range(1, n - d)], bound=1, vpool=self.pool))
+                CardEnc.atmost([self.ord[t][i] for t in range(1, steps)], bound=1, vpool=self.pool))
 
-    def encode_merge(self, n, d):
+    def encode_merge(self, n, steps):
         if self.cubic < 2:
             for i in range(1, n):
                 self.formula.extend(
@@ -101,7 +101,7 @@ class TwinWidthEncoding2:
                 self.formula.append([self.merge[i][j] for j in range(i + 1, n + 1)])
 
             # Ensure that nodes are never merged into an already merged node
-            for t in range(1, n - d):
+            for t in range(1, steps):
                 for i in range(1, n + 1):
                     for j in range(i+1, n + 1):
                         if t > 1 and self.cubic == 1:
@@ -109,7 +109,7 @@ class TwinWidthEncoding2:
                         for t2 in range(1, t):
                             self.formula.append([-self.ord[t][i], -self.merge[i][j], -self.ord[t2][j]])
         else:
-            for t in range(1, n-d):
+            for t in range(1, steps):
                 self.formula.extend(
                     CardEnc.atmost([self.merge[t][j] for j in range(1, n + 1)], bound=1, vpool=self.pool))
                 self.formula.append([self.merge[t][j] for j in range(1, n + 1)])
@@ -124,19 +124,19 @@ class TwinWidthEncoding2:
                         self.formula.append([-self.ord[t][j], -self.merge[t][i]])
 
         if self.cubic > 0:
-            for t in range(2, n-d):
+            for t in range(2, steps):
                 for i in range(1, n + 1):
                     for k in range(1, n+1):
                         if k == i:
                             continue
                         self.formula.append([-self.ord[t][i], -self.tred(t-1, i, k), self.merged_edge[t][k]])
 
-    def encode_sb_order(self, n, d):
+    def encode_sb_order(self, n, d, steps):
         """Enforce lex ordering whenever there is no node that reaches the bound at time t"""
         if d == 0:
             return
 
-        for t in range(2, n - d):
+        for t in range(2, steps):
             c_step_almosts = []
             for i in range(1, n+1):
                 aux = self.pool.id(f"card_aux_{t}_{i}")
@@ -152,7 +152,7 @@ class TwinWidthEncoding2:
                     clause.extend([-self.ord[t-1][j], -self.ord[t][i]])
                     self.formula.append(clause)
 
-    def encode_sb_static(self, n, d, g):
+    def encode_sb_static(self, n, d, g, steps):
         for n1 in range(1, n+1):
             n1nb = set(g.neighbors(n1))
             for n2 in range(n1+1, n + 1):
@@ -172,7 +172,7 @@ class TwinWidthEncoding2:
                         if self.cubic < 2 and d > 0:
                             self.formula.append([-self.merge[n1][n2], -self.static_card[n1][n2][d]])
 
-                        for t in range(1, min(n-d, self.sb_static)):
+                        for t in range(1, min(steps, self.sb_static)):
                             for cn in sd:
                                 cl = [self.pool.id(f"static_st_{n1}_{cn}"), -self.ord[t][n1]]
                                 for t2 in range(1, t):
@@ -184,7 +184,7 @@ class TwinWidthEncoding2:
                         if self.cubic == 2:
                             self.formula.append([-self.ord[t][n1], -self.merge[t if self.cubic == 2 else n1][n2]])
 
-                    for t in range(len(sd)-1, min(n-d, self.sb_static)):
+                    for t in range(len(sd)-1, min(steps, self.sb_static)):
                         if len(sd) - d > 1 and self.sb_static_full:
                             if self.cubic == 2:
                                 if not self.cubic:
@@ -216,10 +216,10 @@ class TwinWidthEncoding2:
         else:
             return self.red[t][j][i]
 
-    def encode_red(self, n, d, g):
+    def encode_red(self, n, g, steps):
         for i in range(1, n + 1):
             inb = set(g.neighbors(i))
-            for t in range(1, n - d):
+            for t in range(1, steps):
                 for j in range(i+1 if self.cubic < 2 else 1, n+1):
                     if i == j:
                         continue
@@ -265,10 +265,10 @@ class TwinWidthEncoding2:
                         elif self.cubic == 2:
                             self.formula.append([-self.merge[t][i], -self.merged_edge[t][j], self.tred(t, i, j)])
 
-    def encode_counters(self, g, d):
+    def encode_counters(self, g, d, steps):
         if self.sb_ord:
             self.cardvars.append([])  # Start indexing from 0
-        for t in range(1, len(g.nodes)-d):  # As last one is the root, no counter needed
+        for t in range(1, steps):  # As last one is the root, no counter needed
             # if self.cubic > 0 and t > 1:
             #     vars = [self.merged_edge[t][j] for j in range(1, len(g.nodes) + 1)]
             #     self.formula.extend(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
@@ -282,12 +282,15 @@ class TwinWidthEncoding2:
                 else:
                     self.formula.extend(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
 
-    def encode(self, g, d, od=None, mg=None):
+    def encode(self, g, d, od=None, mg=None, steps=None):
+        if steps is None:
+            steps = len(g.nodes) - d
+
         g = self.remap_graph(g)
         n = len(g.nodes)
         self.pool = IDPool()
         self.formula = CNF()
-        self.init_var(g, d)
+        self.init_var(g, steps)
 
         if od is not None:
             for i, u in enumerate(od):
@@ -297,21 +300,21 @@ class TwinWidthEncoding2:
             for k, v in mg.items():
                 self.formula.append([-self.merge[k][v]])
 
-        self.encode_order(n, d)
-        self.encode_merge(n, d)
-        self.encode_red(n, d, g)
-        self.encode_counters(g, d)
+        self.encode_order(n, steps)
+        self.encode_merge(n, steps)
+        self.encode_red(n, g, steps)
+        self.encode_counters(g, d, steps)
 
         if self.sb_ord:
-            self.encode_sb_order(n, d)
+            self.encode_sb_order(n, d, steps)
         if self.twohop:
-            self.sb_twohop(n, d, g, True)
+            self.sb_twohop(n, g, steps, True)
 
-        self.encode_sb_static(n, d, g)
+        self.encode_sb_static(n, d, g, steps)
 
         return self.formula
 
-    def sb_twohop(self, n, d, g, full=True):
+    def sb_twohop(self, n, g, steps, full=True):
         for i in range(1, n + 1):
             for j in range(i + 1, n + 1):
                 if g.has_edge(i, j):
@@ -332,7 +335,7 @@ class TwinWidthEncoding2:
                 if not full:
                     continue
 
-                for t in range(2, n-d):
+                for t in range(2, steps):
                     for k in range(1, n + 1):
                         if k == i or k == j:
                             continue
@@ -354,9 +357,11 @@ class TwinWidthEncoding2:
                             overall_clause.append(aux)
 
                         self.formula.append(overall_clause)
-    def run(self, g, solver, start_bound, verbose=True, check=True, lb = 0, timeout=0, od=None, mg=None):
+    def run(self, g, solver, start_bound, verbose=True, check=True, lb = 0, timeout=0, i_od=None, i_mg=None, steps_limit=None):
         start = time.time()
         cb = start_bound
+        od = None
+        mg = None
 
         done = []
         c_slv = None
@@ -376,12 +381,18 @@ class TwinWidthEncoding2:
                 break
             with solver() as slv:
                 c_slv = slv
-                formula = self.encode(g, i, od, mg)
+                if steps_limit is None:
+                    steps = len(g.nodes) - i
+                else:
+                    steps = min(len(g.nodes) - i, steps_limit)
+
+                formula = self.encode(g, i, i_od, i_mg, steps)
 
                 slv.append_formula(formula)
 
                 if verbose:
-                    print(f"Created encoding in {time.time() - start} {slv.nof_clauses()}/{slv.nof_vars()}")
+                    print(f"Created encoding in {time.time() - start} {len(formula.clauses)}/{formula.nv}")
+                    print(f"Solver clauses {slv.nof_clauses()}/{slv.nof_vars()}")
 
                 if done:
                     break
@@ -389,7 +400,7 @@ class TwinWidthEncoding2:
                 if slv.solve() if timeout == 0 else slv.solve_limited():
                     if verbose:
                         print(f"Found {i}")
-                    cb = self.decode(slv.get_model(), g, i)
+                    cb, od, mg = self.decode(slv.get_model(), g, i, steps, verbose)
                     i = cb - 1
                 else:
                     if verbose:
@@ -401,9 +412,12 @@ class TwinWidthEncoding2:
         if timer is not None:
             timer.cancel()
         print(f"Finished in {time.time() - start}")
-        return cb
+        if od is None:
+            return cb
+        else:
+            return cb, od, mg
 
-    def decode(self, model, g, d):
+    def decode(self, model, g, d, steps, verbose):
         g = g.copy()
         model = {abs(x): x > 0 for x in model}
         unmap = {}
@@ -415,7 +429,7 @@ class TwinWidthEncoding2:
         od = []
         unordered = set(range(1, len(g.nodes)+1))
 
-        for t in range(1, len(g.nodes) - d):
+        for t in range(1, steps):
             for j in range(1, len(g.nodes) + 1):
                 if model[self.ord[t][j]]:
                     if len(od) >= t:
@@ -436,7 +450,7 @@ class TwinWidthEncoding2:
                             print("Error, double merge!")
                         mg[i] = j
         else:
-            for i in range(1, len(g.nodes)-d):
+            for i in range(1, steps):
                 t = od[i-1]
                 for j in range(1, len(g.nodes) + 1):
                     if model[self.merge[i][j]]:
@@ -453,6 +467,8 @@ class TwinWidthEncoding2:
         for n in od:
             t = unmap[mg[n]]
             n = unmap[n]
+            if verbose:
+                print(f"{n} => {t}")
             tn = set(g.neighbors(t))
             tn.discard(n)
             nn = set(g.neighbors(n))
@@ -486,5 +502,4 @@ class TwinWidthEncoding2:
                 c_max = max(c_max, cc)
 
             step += 1
-        print(f"Done {c_max}/{d}")
-        return c_max
+        return c_max, od, mg
