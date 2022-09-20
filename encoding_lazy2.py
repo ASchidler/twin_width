@@ -263,7 +263,7 @@ class TwinWidthEncoding2:
         self.merge = [{} for _ in range(0, len(g.nodes) + 1)]
         self.merged_edge = [{} for _ in range(0, len(g.nodes) + 1)]
         self.merged = [{} for _ in range(0, len(g.nodes) + 1)]
-        self.cv = [[[]] for _ in range(0, len(g.nodes))]
+        self.cv = [[[]] for _ in range(0, len(g.nodes)+1)]
         self.initials = {}
         self.static_card = [{} for _ in range(0, len(g.nodes) + 1)]
 
@@ -311,6 +311,9 @@ class TwinWidthEncoding2:
         return self.formula
 
     def run(self, g, solver, start_bound, verbose=True, check=True, timeout=0):
+        if len(g.nodes) <= 2:
+            return 0
+
         use_merge_sb = False
         start = time.time()
         cb = start_bound

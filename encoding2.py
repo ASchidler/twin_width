@@ -2,14 +2,14 @@ import sys
 import time
 
 from networkx import Graph
-from pysat.card import CardEnc, EncType
+from pysat.card import CardEnc, EncType, ITotalizer
 from pysat.formula import CNF, IDPool
 from threading import Timer
 import tools
 
 
 class TwinWidthEncoding2:
-    def __init__(self, g, card_enc=EncType.mtotalizer, cubic=0, sb_ord=False, twohop=False, sb_static=sys.maxsize, sb_static_full=False):
+    def __init__(self, g, card_enc=EncType.mtotalizer, cubic=0, sb_ord=False, twohop=False, sb_static=sys.maxsize, sb_static_full=False, sb_static_diff=False):
         self.ord = None
         self.merge = None
         self.merged_edge = None
@@ -27,6 +27,7 @@ class TwinWidthEncoding2:
         self.sb_static = sb_static
         self.sb_static_full = sb_static_full
         self.static_card = None
+        self.sb_static_diff = sb_static_diff
 
     def remap_graph(self, g):
         self.node_map = {}
@@ -164,9 +165,13 @@ class TwinWidthEncoding2:
                 if len(sd) > d:
                     if self.sb_static_full:
                         lits = [self.pool.id(f"static_st_{n1}_{cn}") for cn in sd]
-                        form, cards = tools.encode_cards_exact(self.pool, lits, d, f"static_full_{n1}_{n2}",
-                                                               add_constraint=False)
-                        self.formula.extend(form)
+                        with ITotalizer(lits, ubound=d, top_id=self.pool.id(f"static_full_{n1}_{n2}")) as tot:
+                            self.pool.occupy(self.pool.top - 1, tot.top_id)
+                            self.formula.extend(tot.cnf)
+                            cards = list(tot.rhs)
+                        # form, cards = tools.encode_cards_exact(self.pool, lits, d, f"static_full_{n1}_{n2}",
+                        #                                        add_constraint=False)
+                        # self.formula.extend(form)
                         self.static_card[n1][n2] = cards
 
                         if self.cubic < 2 and d > 0:
@@ -181,28 +186,27 @@ class TwinWidthEncoding2:
                                 self.formula.append(cl)
 
                     for t in range(1, len(sd)-d):
-                        if self.cubic == 2:
-                            self.formula.append([-self.ord[t][n1], -self.merge[t if self.cubic == 2 else n1][n2]])
+                        self.formula.append([-self.ord[t][n1], -self.merge[t if self.cubic == 2 else n1][n2]])
 
-                    for t in range(len(sd)-1, min(steps, self.sb_static)):
+                    for t in range(len(sd)-d, min(steps, self.sb_static)):
                         if len(sd) - d > 1 and self.sb_static_full:
                             if self.cubic == 2:
-                                if not self.cubic:
-                                    self.formula.append(
-                                        [-self.ord[t][n1], -self.merge[t][n2], -self.static_card[n1][n2][d]])
+                                self.formula.append(
+                                    [-self.ord[t][n1], -self.merge[t][n2], -self.static_card[n1][n2][d]])
 
-                                    for cd in range(1, d):
-                                        if cd > 1:
-                                            # There might be a red edge between i and j and some other node that might be contracted away, so + 1
-                                            self.formula.append([-self.ord[t][n1],
-                                                            -self.merge[t][n2],
-                                                            -self.cardvars[t - 1][n2-1][cd]
-                                                            -self.static_card[n1][n2][d - cd]])
+                            if self.sb_static_diff:
+                                for cd in range(0, d):
+                                    if cd > 0:
+                                        # There might be a red edge between i and j and some other node that might be contracted away, so + 1
                                         self.formula.append([-self.ord[t][n1],
-                                                        -self.merge[t][n2],
-                                                        self.tred(t - 1, n1, n2)
-                                                        -self.cardvars[t - 1][n2-1][cd]
-                                                        -self.static_card[n1][n2][d - cd - 1]])  # Substract 1 as cardvars[d] expresses that d is exceeded!
+                                                        -self.merge[t if self.cubic == 2 else n1][n2],
+                                                        -self.cardvars[t - 1][n2-1][cd],
+                                                        -self.static_card[n1][n2][d - cd]])
+                                    self.formula.append([-self.ord[t][n1],
+                                                    -self.merge[t if self.cubic == 2 else n1][n2],
+                                                    self.tred(t - 1, n1, n2),
+                                                    -self.cardvars[t - 1][n2-1][cd],
+                                                    -self.static_card[n1][n2][d - cd - 1]])  # Substract 1 as cardvars[d] expresses that d is exceeded!
                         else:
                             cl = [-self.ord[t][n1], -self.merge[t if self.cubic == 2 else n1][n2]]
 
@@ -275,12 +279,24 @@ class TwinWidthEncoding2:
 
             for i in range(1, len(g.nodes) + 1):
                 vars = [self.tred(t, i, j) for j in range(1, len(g.nodes)+1) if i != j]
-                if self.sb_ord or (self.sb_static and self.sb_static_full):
+                if self.sb_ord:
+                    # with ITotalizer(vars, ubound=d, top_id=self.pool.id(f"totalizer{t}_{i}")) as tot:
+                    #     self.formula.extend(tot.cnf)
+                    #     self.pool.occupy(self.pool.top - 1, tot.top_id)
+                    #     self.formula.append([-tot.rhs[d]])
+                    #     self.cardvars[t].append(list(tot.rhs))
+
                     form, cvars = tools.encode_cards_exact(self.pool, vars, d, f"cardvars_{t}_{i}")
                     self.formula.extend(form)
                     self.cardvars[t].append(cvars)
                 else:
-                    self.formula.extend(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
+                    with ITotalizer(vars, ubound=d, top_id=self.pool.id(f"totalizer{t}_{i}")) as tot:
+                        self.formula.extend(tot.cnf)
+                        self.pool.occupy(self.pool.top - 1, tot.top_id)
+                        self.formula.append([-tot.rhs[d]])
+                        self.cardvars[t].append(list(tot.rhs))
+
+                    # self.formula.extend(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
 
     def encode(self, g, d, od=None, mg=None, steps=None):
         if steps is None:
@@ -411,7 +427,8 @@ class TwinWidthEncoding2:
                     print(f"Finished cycle in {time.time() - start}")
         if timer is not None:
             timer.cancel()
-        print(f"Finished in {time.time() - start}")
+        if verbose:
+            print(f"Finished in {time.time() - start}")
         if od is None:
             return cb
         else:

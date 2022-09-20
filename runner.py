@@ -37,6 +37,8 @@ ap.add_argument("-f", dest="contraction_full", action="store_true", default=Fals
 ap.add_argument("-l", dest="contraction_limit", action="store", default=sys.maxsize, type=int,
                 help="Limit the number of contractions for which contraction hints are used (only available for absolute encodings)"
                 )
+ap.add_argument("-i", dest="contraction_diff", action="store_true", default=False,
+                help="Use additional contraction hints with additional clauses based on the red degree of the vertex (only available for absolute encodings)")
 ap.add_argument("-o", dest="order", action="store_true", default=False,
                 help="Use order symmetry breaking (only available for absolute encodings).")
 ap.add_argument("-d", dest="draw", action="store_true", default=False,
@@ -95,7 +97,7 @@ else:
         enc = encoding.TwinWidthEncoding(use_sb_static=args.contraction, use_sb_static_full=args.contraction_full)
     elif args.encoding == 1:
         enc = encoding2.TwinWidthEncoding2(g, sb_ord=args.order, sb_static=0 if not args.contraction else args.contraction_limit, sb_static_full=args.contraction_full,
-                                           cubic=2 if args.cubic else 0)
+                                           cubic=2 if args.cubic else 0, sb_static_diff=args.contraction_diff)
     else:        
         enc = lazy2.TwinWidthEncoding2(g, sb_ord=args.order, sb_static=0 if not args.contraction else args.contraction_limit, use_sb_static_full=args.contraction_full)
     # enc = lazy.TwinWidthEncoding()

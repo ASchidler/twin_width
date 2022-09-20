@@ -87,7 +87,7 @@ class TwinWidthEncoding:
                 done.add(cn)
                 for i in range(1, len(g.nodes) + 1):
                     if i not in done and i != cn:
-                        formula.append([-self.tord(cn, i)])
+                        formula.append([self.tord(cn, i)])
 
         if mg is not None:
             for k, v in mg.items():
@@ -280,13 +280,20 @@ class TwinWidthEncoding:
                 if len(sd) > d:
                     if (len(sd) - d > 1 and (old_d is None or len(sd) - old_d <= 1)) and self.use_sb_static_full:
                         lits = [self.tord(i, x) for x in sd]
-                        cform, cards = tools.encode_cards_exact(self.pool, lits, d, f"static_{i}_{j}", rev=True, add_constraint=False)
-                        if slv is None:
-                            form.extend(cform)
-                        else:
-                            slv.append_formula(cform)
-
-                        self.static_cards[i][j] = cards
+                        with ITotalizer(lits, ubound=d, top_id=self.pool.id(f"static{i}_{j}")) as tot:
+                            self.pool.occupy(self.pool.top - 1, tot.top_id)
+                            self.static_cards[i][j] = list(tot.rhs)
+                            if slv is None:
+                                form.extend(tot.cnf)
+                            else:
+                                slv.append_formula(tot.cnf)
+                        # cform, cards = tools.encode_cards_exact(self.pool, lits, d, f"static_{i}_{j}", rev=True, add_constraint=False)
+                        # if slv is None:
+                        #     form.extend(cform)
+                        # else:
+                        #     slv.append_formula(cform)
+                        #
+                        # self.static_cards[i][j] = cards
                     elif old_d is None or len(sd) <= old_d:
                         cl = [-self.merge[i][j]]
                         for x in sd:
