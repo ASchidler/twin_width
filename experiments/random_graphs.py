@@ -32,7 +32,7 @@ def compute_graph(args):
                 cg.add_edge(u, v)
 
         # enc = encoding.TwinWidthEncoding(g)
-        enc = encoding2.TwinWidthEncoding2(g, cubic=2, sb_ord=True, sb_static=sys.maxsize, sb_static_full=True, sb_static_diff=True)
+        enc = encoding2.TwinWidthEncoding2(g, cubic=2, sb_ord=False, sb_static=sys.maxsize, sb_static_full=True, sb_static_diff=True)
         # enc = encoding_lazy2.TwinWidthEncoding2(g, cubic=True, sb_ord=True)
         result = enc.run(cg, Cadical, heuristic.get_ub(cg), check=False, verbose=False)
         if isinstance(result, int):

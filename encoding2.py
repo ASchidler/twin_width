@@ -9,7 +9,7 @@ import tools
 
 
 class TwinWidthEncoding2:
-    def __init__(self, g, card_enc=EncType.mtotalizer, cubic=0, sb_ord=False, twohop=False, sb_static=sys.maxsize, sb_static_full=False, sb_static_diff=False):
+    def __init__(self, g, card_enc=EncType.mtotalizer, cubic=0, sb_ord=False, twohop=False, sb_static=sys.maxsize, sb_static_full=False, sb_static_diff=False, is_grid=False):
         self.ord = None
         self.merge = None
         self.merged_edge = None
@@ -28,13 +28,14 @@ class TwinWidthEncoding2:
         self.sb_static_full = sb_static_full
         self.static_card = None
         self.sb_static_diff = sb_static_diff
+        self.is_grid = is_grid
 
     def remap_graph(self, g):
         self.node_map = {}
         cnt = 1
         gn = Graph()
 
-        for u, v in g.edges():
+        for u, v in sorted(g.edges()):
             if u not in self.node_map:
                 self.node_map[u] = cnt
                 cnt += 1
@@ -139,19 +140,27 @@ class TwinWidthEncoding2:
 
         for t in range(2, steps):
             c_step_almosts = []
+            aux_step = self.pool.id(f"card_aux_step_{t}")
             for i in range(1, n+1):
                 aux = self.pool.id(f"card_aux_{t}_{i}")
                 self.formula.append([self.cardvars[t-1][i-1][-2], -self.cardvars[t][i-1][-2], aux])
                 self.formula.append([-aux, -self.cardvars[t - 1][i-1][-2]])
                 self.formula.append([-aux, self.cardvars[t][i-1][-2]])
+                self.formula.append([-aux, aux_step])
                 c_step_almosts.append(aux)
+            c_step_almosts.append(-aux_step)
+            self.formula.append(c_step_almosts)
 
             # c_step_almosts = [self.cardvars[t][x][-2] for x in range(0, n)]
+        for t in range(2, steps):
+            aux_step = self.pool.id(f"card_aux_step_{t}")
             for i in range(1, n + 1):
                 for j in range(i + 1, n + 1):
-                    clause = list(c_step_almosts)
-                    clause.extend([-self.ord[t-1][j], -self.ord[t][i]])
-                    self.formula.append(clause)
+                    for t2 in range(1, t):
+                        clause = [-self.ord[t2][j], -self.ord[t][i], aux_step]
+                        for t3 in range(t2+1, t):
+                            clause.append(self.pool.id(f"card_aux_step_{t3}"))
+                        self.formula.append(clause)
 
     def encode_sb_static(self, n, d, g, steps):
         for n1 in range(1, n+1):
@@ -310,11 +319,11 @@ class TwinWidthEncoding2:
 
         if od is not None:
             for i, u in enumerate(od):
-                self.formula.append([-self.ord[i+1][u]])
+                self.formula.append([self.ord[i+1][u]])
 
         if mg is not None:
             for k, v in mg.items():
-                self.formula.append([-self.merge[k][v]])
+                self.formula.append([self.merge[k][v]])
 
         self.encode_order(n, steps)
         self.encode_merge(n, steps)
@@ -327,6 +336,10 @@ class TwinWidthEncoding2:
             self.sb_twohop(n, g, steps, True)
 
         self.encode_sb_static(n, d, g, steps)
+
+        if self.is_grid:
+            self.formula.append([self.ord[1][1]])
+            self.formula.append([self.merge[1][2], self.merge[1][5], self.merge[1][6]])
 
         return self.formula
 
