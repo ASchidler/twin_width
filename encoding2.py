@@ -322,8 +322,13 @@ class TwinWidthEncoding2:
                 self.formula.append([self.ord[i+1][u]])
 
         if mg is not None:
-            for k, v in mg.items():
-                self.formula.append([self.merge[k][v]])
+            if self.cubic == 2:
+                for i, u in enumerate(od):
+                    self.formula.append([self.merge[i+1][mg[u]]])
+            else:
+                for k, v in mg.items():
+                    self.formula.append([self.merge[k][v]])
+
 
         self.encode_order(n, steps)
         self.encode_merge(n, steps)

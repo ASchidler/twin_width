@@ -113,7 +113,7 @@ class TwinWidthEncoding:
         # single merge target
         for i in range(1, len(g.nodes)):
             formula.extend(CardEnc.atleast([self.merge[i][j] for j in range(i + 1, len(g.nodes) + 1)], bound=1, vpool=self.pool))
-            formula.extend(tools.amo_commander([self.merge[i][j] for j in range(i + 1, len(g.nodes) + 1)], self.pool))
+            formula.extend(CardEnc.atmost([self.merge[i][j] for j in range(i + 1, len(g.nodes) + 1)], bound=1, vpool=self.pool))
 
         # Create red arcs
         for i in range(1, len(g.nodes) + 1):
