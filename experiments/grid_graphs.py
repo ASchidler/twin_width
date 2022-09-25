@@ -14,11 +14,10 @@ import encoding_lazy2
 import heuristic
 import queue
 
-dimensions_x = 9
-dimensions_y = 6
-
 min_steps = 5
-max_steps = 40
+
+dimensions_x, dimensions_y, max_steps = 7, 7, 35
+# dimensions_x, dimensions_y, max_steps = 9, 6, 40
 
 targets = []
 
@@ -38,13 +37,15 @@ rmap = {y: x for (x, y) in enc.node_map.items()}
 
 def generate_instances(cgg):
     q = []
-    q.append((cgg, (1, 2), [], defaultdict(bool), set()))
-    q.append((cgg, (1, 4), [], defaultdict(bool), set()))
-    q.append((cgg, (1, 5), [], defaultdict(bool), set()))
+    q.append((cgg, (1, 2), [], defaultdict(bool), set(), []))
+    q.append((cgg, (1, 4), [], defaultdict(bool), set(), []))
+    q.append((cgg, (1, 5), [], defaultdict(bool), set(), []))
 
     while q:
-        cg, cm, cs, changed, at_limit = q.pop()
+        cg, cm, cs, changed, at_limit, decreased = q.pop()
         cs = list(cs)
+        decreased = list(decreased)
+        new_decreased = set()
         cs.append(cm)
         changed = copy(changed)
 
@@ -63,17 +64,25 @@ def generate_instances(cgg):
         changed[n1] = True
         changed[n2] = True
 
+        if cg.has_edge(n1, n2) and cg[n1][n2]["red"]:
+            if all(cg.has_edge(n2, x) and cg[n2][x]["red"] for x in nbdiff):
+                new_decreased.add(n2)
+
         for cn in n1nb:
             if cg[n1][cn]["red"]:
                 nbdiff.add(cn)
 
         for cn in nbdiff:
+            if cg.has_edge(n1, cn) and cg.has_edge(n2, cn) and cg[n2][cn]["red"] and cg[n1][cn]["red"]:
+                new_decreased.add(cn)
+
             changed[cn] = True
             if not cg.has_edge(n2, cn):
                 cg.add_edge(n2, cn, red=True)
             else:
                 cg[n2][cn]["red"] = True
         cg.remove_node(n1)
+        decreased.append(new_decreased)
 
         for cn in cg.nodes:
             rdg = 0
@@ -127,6 +136,7 @@ def generate_instances(cgg):
                         went_limit = True
 
                     exceeded = False
+                    went_limit = []
                     for cn in nbdiff:
                         if (cg.has_edge(n1, cn) and cg[n1][cn]["red"]) or (cg.has_edge(n2, cn) and cg[n2][cn]["red"]):
                             continue
@@ -141,26 +151,29 @@ def generate_instances(cgg):
                             break
 
                         if rdg == 2:
-                            went_limit = True
+                            went_limit.append(cn)
 
                     if exceeded:
                         continue
 
-                    if not went_limit:
-                        at_limit_new = at_limit
-                        nonlex = False
-                        for myn1, _ in reversed(cs):
-                            if myn1 in at_limit:
-                                break
-                            if myn1 > n1:
-                                nonlex = True
-                                break
-                        if nonlex:
-                            continue
-                    else:
+                    if went_limit:
                         at_limit_new = set(at_limit)
                         at_limit_new.add(n1)
-                    candidates.append((cg, (n1, n2), cs, changed, at_limit_new))
+                    else:
+                        at_limit_new = at_limit
+
+                    nonlex = False
+                    for i, (myn1, _) in enumerate(reversed(cs)):
+                        if any(x in decreased[-i] for x in went_limit):
+                            break
+
+                        if myn1 > n1:
+                            nonlex = True
+                            break
+                    if nonlex:
+                        continue
+
+                    candidates.append((cg, (n1, n2), cs, changed, at_limit_new, decreased))
 
         if len(cs) >= min_steps:
             targets.append(cs)
@@ -174,10 +187,10 @@ def compute_graph(args):
     ord = [x for x, y in args]
     mg = {x: y for x, y in args}
 
-    cenc = encoding2.TwinWidthEncoding2(g, cubic=2, sb_ord=True, sb_static=2 * len(g.nodes) // 3, sb_static_full=True,
-                                       is_grid=True)
-
-    result = cenc.run(g, solver=Cadical, start_bound=3, i_od=ord, i_mg=mg, verbose=False, steps_limit=max_steps)
+    # cenc = encoding2.TwinWidthEncoding2(g, cubic=2, sb_ord=True, sb_static=2 * len(g.nodes) // 3, sb_static_full=True,
+    #                                    is_grid=True)
+    cenc = encoding.TwinWidthEncoding(use_sb_static=True, use_sb_static_full=True)
+    result = cenc.run(g, solver=Cadical, start_bound=3, i_od=ord, i_mg=mg, verbose=True, steps_limit=max_steps)
 
     if isinstance(result, int):
         return args
@@ -194,9 +207,11 @@ with open(f"dimensions_{dimensions_x}_{dimensions_y}.done", "a") as outp:
             if isinstance(tww, list):
                 print(f"Tried {tww}")
                 outp.write(f"{tww}"+os.linesep)
+                outp.flush()
             else:
                 print(f"Succeeded {tww}")
                 outp.write(f"!Success {tww}")
+                outp.flush()
                 exit(0)
 
 

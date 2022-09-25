@@ -27,7 +27,7 @@ class TwinWidthEncoding:
         cnt = 1
         gn = Graph()
 
-        for u, v in g.edges():
+        for u, v in sorted(g.edges()):
             if u not in self.node_map:
                 self.node_map[u] = cnt
                 cnt += 1
@@ -151,7 +151,7 @@ class TwinWidthEncoding:
 
         return formula
 
-    def run(self, g, solver, start_bound, verbose=True, check=True, lb=0, i_od=None, i_mg=None):
+    def run(self, g, solver, start_bound, verbose=True, check=True, lb=0, i_od=None, i_mg=None, steps_limit=None):
         start = time.time()
         formula = self.encode(g, start_bound, i_od, i_mg)
         cb = start_bound
