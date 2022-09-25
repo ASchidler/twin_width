@@ -14,10 +14,12 @@ import encoding_lazy2
 import heuristic
 import queue
 
-min_steps = 5
+min_steps = 4
 
 dimensions_x, dimensions_y, max_steps = 7, 7, 35
 # dimensions_x, dimensions_y, max_steps = 9, 6, 40
+
+outp_file = f"dimensions_{dimensions_x}_{dimensions_y}.done"
 
 targets = []
 
@@ -35,6 +37,26 @@ for cn1, cn2 in gn.edges:
 
 rmap = {y: x for (x, y) in enc.node_map.items()}
 
+done = {}
+with open(outp_file) as inp:
+    for cline in inp:
+        cline = cline.strip()
+        if cline.startswith("["):
+            cline = cline[1:-1]
+            entries = cline.split(")")[:-1]
+            entries = [x[x.index("(")+1:] for x in entries]
+
+            c_d = done
+            for ce in entries[:-1]:
+                fields = ce.split(",")
+                x, y = int(fields[0].strip()), int(fields[1].strip())
+                if (x, y) not in c_d:
+                    c_d[(x, y)] = {}
+                c_d = c_d[(x, y)]
+            fields = entries[-1].split(",")
+            x, y = int(fields[0].strip()), int(fields[1].strip())
+            c_d[(x, y)] = 1
+
 def generate_instances(cgg):
     q = []
     q.append((cgg, (1, 2), [], defaultdict(bool), set(), []))
@@ -48,6 +70,16 @@ def generate_instances(cgg):
         new_decreased = set()
         cs.append(cm)
         changed = copy(changed)
+
+        c_done = done
+        for centry in cs:
+            if c_done == 1:
+                break
+            if centry in c_done:
+                c_done = c_done[centry]
+            else:
+                c_done = None
+                break
 
         if len(cs) >= min_steps:
             yield cs
@@ -102,6 +134,9 @@ def generate_instances(cgg):
 
             for n2 in cg.nodes:
                 if n1 < n2:
+                    # if c_done is not None and (n1, n2) in c_done and c_done[(n1, n2)] == 1:
+                    #     continue
+
                     n1nb = set(cg.neighbors(n1))
                     n2nb = set(cg.neighbors(n2))
                     n1nb.discard(n2)
@@ -197,11 +232,13 @@ def compute_graph(args):
     else:
         return result
 
-# for cx in generate_instances(gn):
-#     print(cx)
-# exit(0)
+cnt = 1
+for cx in generate_instances(gn):
+    print(f"{cnt} {cx}")
+    cnt += 1
+exit(0)
 
-with open(f"dimensions_{dimensions_x}_{dimensions_y}.done", "a") as outp:
+with open(outp_file, "a") as outp:
     with Pool(pool_size) as pool:
         for tww in pool.imap_unordered(compute_graph, generate_instances(gn)):
             if isinstance(tww, list):
