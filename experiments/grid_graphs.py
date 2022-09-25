@@ -1,12 +1,15 @@
+import ctypes
 import os
 import sys
-from multiprocessing import Pool
+from multiprocessing import Pool, Process
 from copy import copy
+from pebble import ProcessPool
 
 import networkx as nx
 from networkx.generators.lattice import grid_2d_graph
 from pysat.solvers import Cadical
 from collections import defaultdict
+from concurrent.futures import TimeoutError
 
 import encoding
 import encoding2
@@ -38,24 +41,25 @@ for cn1, cn2 in gn.edges:
 rmap = {y: x for (x, y) in enc.node_map.items()}
 
 done = {}
-with open(outp_file) as inp:
-    for cline in inp:
-        cline = cline.strip()
-        if cline.startswith("["):
-            cline = cline[1:-1]
-            entries = cline.split(")")[:-1]
-            entries = [x[x.index("(")+1:] for x in entries]
+if os.path.exists(outp_file):
+    with open(outp_file) as inp:
+        for cline in inp:
+            cline = cline.strip()
+            if cline.startswith("["):
+                cline = cline[1:-1]
+                entries = cline.split(")")[:-1]
+                entries = [x[x.index("(")+1:] for x in entries]
 
-            c_d = done
-            for ce in entries[:-1]:
-                fields = ce.split(",")
+                c_d = done
+                for ce in entries[:-1]:
+                    fields = ce.split(",")
+                    x, y = int(fields[0].strip()), int(fields[1].strip())
+                    if (x, y) not in c_d:
+                        c_d[(x, y)] = {}
+                    c_d = c_d[(x, y)]
+                fields = entries[-1].split(",")
                 x, y = int(fields[0].strip()), int(fields[1].strip())
-                if (x, y) not in c_d:
-                    c_d[(x, y)] = {}
-                c_d = c_d[(x, y)]
-            fields = entries[-1].split(",")
-            x, y = int(fields[0].strip()), int(fields[1].strip())
-            c_d[(x, y)] = 1
+                c_d[(x, y)] = 1
 
 def generate_instances(cgg):
     q = []
@@ -222,34 +226,58 @@ def compute_graph(args):
     ord = [x for x, y in args]
     mg = {x: y for x, y in args}
 
-    # cenc = encoding2.TwinWidthEncoding2(g, cubic=2, sb_ord=True, sb_static=2 * len(g.nodes) // 3, sb_static_full=True,
-    #                                    is_grid=True)
-    cenc = encoding.TwinWidthEncoding(use_sb_static=True, use_sb_static_full=True)
-    result = cenc.run(g, solver=Cadical, start_bound=3, i_od=ord, i_mg=mg, verbose=True, steps_limit=max_steps)
+    cenc = encoding2.TwinWidthEncoding2(g, cubic=2, sb_ord=True, sb_static=2 * len(g.nodes) // 3, sb_static_full=True,
+                                       is_grid=True)
 
-    if isinstance(result, int):
+    # cenc = encoding.TwinWidthEncoding(use_sb_static=True, use_sb_static_full=True)
+    result = cenc.run(g, solver=Cadical, start_bound=3, i_od=ord, i_mg=mg, verbose=False, steps_limit=max_steps)
+
+    if len(result) == 2:
         return args
     else:
         return result
 
-cnt = 1
-for cx in generate_instances(gn):
-    print(f"{cnt} {cx}")
-    cnt += 1
-exit(0)
+if __name__ == '__main__':
+    # cnt = 1
+    # for cx in generate_instances(gn):
+    #     print(f"{cnt} {cx}")
+    #     cnt += 1
+    # exit(0)
 
-with open(outp_file, "a") as outp:
-    with Pool(pool_size) as pool:
-        for tww in pool.imap_unordered(compute_graph, generate_instances(gn)):
-            if isinstance(tww, list):
-                print(f"Tried {tww}")
-                outp.write(f"{tww}"+os.linesep)
-                outp.flush()
-            else:
-                print(f"Succeeded {tww}")
-                outp.write(f"!Success {tww}")
-                outp.flush()
-                exit(0)
+    with open(outp_file, "a") as outp:
+        # with Pool(pool_size) as pool:
+        #     for tww in pool.imap_unordered(compute_graph, generate_instances(gn), chunksize=100):
+        # if isinstance(tww, list):
+        #     print(f"Tried {tww}")
+        #     outp.write(f"{tww}" + os.linesep)
+        #     outp.flush()
+        # else:
+        #     print(f"Succeeded {tww}")
+        #     outp.write(f"! {tww}")
+        #     outp.flush()
+        #     exit(0)
 
+        with ProcessPool(max_workers=pool_size) as pool:
+            future = pool.map(compute_graph, generate_instances(gn), chunksize=200, timeout=4*3600)
+            it = future.result()
+
+            while True:
+                try:
+                    tww = next(it)
+                    if isinstance(tww, list):
+                        print(f"Tried {tww}")
+                        outp.write(f"{tww}" + os.linesep)
+                        outp.flush()
+                    else:
+                        print(f"Succeeded {tww}")
+                        outp.write(f"! {tww}")
+                        outp.flush()
+                        exit(0)
+                except TimeoutError as error:
+                    print(f"Timeout")
+                except StopIteration:
+                    break
+
+        print("Finished")
 
 
