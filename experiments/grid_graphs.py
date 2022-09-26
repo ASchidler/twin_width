@@ -17,12 +17,14 @@ import encoding_lazy2
 import heuristic
 import queue
 
-min_steps = 4
+min_steps = 2
 
 dimensions_x, dimensions_y, max_steps = 7, 7, 35
 # dimensions_x, dimensions_y, max_steps = 9, 6, 40
 
 outp_file = f"dimensions_{dimensions_x}_{dimensions_y}.done"
+
+timeout = 4 * 3600
 
 targets = []
 
@@ -41,6 +43,7 @@ for cn1, cn2 in gn.edges:
 rmap = {y: x for (x, y) in enc.node_map.items()}
 
 done = {}
+
 if os.path.exists(outp_file):
     with open(outp_file) as inp:
         for cline in inp:
@@ -61,7 +64,7 @@ if os.path.exists(outp_file):
                 x, y = int(fields[0].strip()), int(fields[1].strip())
                 c_d[(x, y)] = 1
 
-def generate_instances(cgg):
+def generate_instances(cgg, c_minsteps, created):
     q = []
     q.append((cgg, (1, 2), [], defaultdict(bool), set(), []))
     q.append((cgg, (1, 4), [], defaultdict(bool), set(), []))
@@ -75,6 +78,11 @@ def generate_instances(cgg):
         cs.append(cm)
         changed = copy(changed)
 
+        if len(cs) >= c_minsteps:
+            created.append(cs)
+            yield cs
+            continue
+
         c_done = done
         for centry in cs:
             if c_done == 1:
@@ -84,10 +92,6 @@ def generate_instances(cgg):
             else:
                 c_done = None
                 break
-
-        if len(cs) >= min_steps:
-            yield cs
-            continue
 
         cg = cg.copy()
         n1, n2 = cm
@@ -212,14 +216,7 @@ def generate_instances(cgg):
                     if nonlex:
                         continue
 
-                    candidates.append((cg, (n1, n2), cs, changed, at_limit_new, decreased))
-
-        if len(cs) >= min_steps:
-            targets.append(cs)
-            print(f"{len(targets)}")
-        else:
-            for ce in candidates:
-                q.append(ce)
+                    q.append((cg, (n1, n2), cs, changed, at_limit_new, decreased))
 
 
 def compute_graph(args):
@@ -239,45 +236,51 @@ def compute_graph(args):
 
 if __name__ == '__main__':
     # cnt = 1
-    # for cx in generate_instances(gn):
+    # for cx in generate_instances(gn, 2):
     #     print(f"{cnt} {cx}")
     #     cnt += 1
     # exit(0)
 
     with open(outp_file, "a") as outp:
-        # with Pool(pool_size) as pool:
-        #     for tww in pool.imap_unordered(compute_graph, generate_instances(gn), chunksize=100):
-        # if isinstance(tww, list):
-        #     print(f"Tried {tww}")
-        #     outp.write(f"{tww}" + os.linesep)
-        #     outp.flush()
-        # else:
-        #     print(f"Succeeded {tww}")
-        #     outp.write(f"! {tww}")
-        #     outp.flush()
-        #     exit(0)
+        with open(outp_file+".to", "a") as outp_to:
+            # with Pool(pool_size) as pool:
+            #     for tww in pool.imap_unordered(compute_graph, generate_instances(gn), chunksize=100):
+            # if isinstance(tww, list):
+            #     print(f"Tried {tww}")
+            #     outp.write(f"{tww}" + os.linesep)
+            #     outp.flush()
+            # else:
+            #     print(f"Succeeded {tww}")
+            #     outp.write(f"! {tww}")
+            #     outp.flush()
+            #     exit(0)
 
-        with ProcessPool(max_workers=pool_size) as pool:
-            future = pool.map(compute_graph, generate_instances(gn), chunksize=200, timeout=4*3600)
-            it = future.result()
-
-            while True:
-                try:
-                    tww = next(it)
-                    if isinstance(tww, list):
-                        print(f"Tried {tww}")
-                        outp.write(f"{tww}" + os.linesep)
-                        outp.flush()
-                    else:
-                        print(f"Succeeded {tww}")
-                        outp.write(f"! {tww}")
-                        outp.flush()
-                        exit(0)
-                except TimeoutError as error:
-                    print(f"Timeout")
-                except StopIteration:
-                    break
-
-        print("Finished")
+            for c_steps in range(min_steps, max_steps):
+                c_created = []
+                cnt = 0
+                with ProcessPool(max_workers=pool_size) as pool:
+                    future = pool.map(compute_graph, generate_instances(gn, c_steps, c_created), chunksize=1, timeout=timeout)
+                    it = future.result()
+                    while True:
+                        try:
+                            tww = next(it)
+                            if isinstance(tww, list):
+                                print(f"Tried {tww}")
+                                outp.write(f"{tww}" + os.linesep)
+                                outp.flush()
+                            else:
+                                print(f"Succeeded {tww}")
+                                outp.write(f"! {tww}")
+                                outp.flush()
+                                exit(0)
+                        except StopIteration as ee:
+                            break
+                        except TimeoutError as error:
+                            print(f"Timeout {c_created[cnt]}")
+                            outp_to.write(f"{c_created[cnt]}{os.linesep}")
+                            outp_to.flush()
+                        finally:
+                            cnt += 1
+                print(f"Finished {c_steps}")
 
 
