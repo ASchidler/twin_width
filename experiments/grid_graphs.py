@@ -24,7 +24,7 @@ dimensions_x, dimensions_y, max_steps = 7, 7, 35
 
 outp_file = f"dimensions_{dimensions_x}_{dimensions_y}.done"
 
-timeout = 4 * 3600
+timeout = 60
 
 targets = []
 
@@ -229,7 +229,7 @@ def compute_graph(args):
     # cenc = encoding.TwinWidthEncoding(use_sb_static=True, use_sb_static_full=True)
     result = cenc.run(g, solver=Cadical, start_bound=3, i_od=ord, i_mg=mg, verbose=False, steps_limit=max_steps)
 
-    if len(result) == 2:
+    if isinstance(result, int) or len(result) == 2:
         return args
     else:
         return result
