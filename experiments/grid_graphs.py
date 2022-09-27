@@ -4,6 +4,7 @@ import sys
 from multiprocessing import Pool, Process
 from copy import copy
 from pebble import ProcessPool
+from itertools import combinations
 
 import networkx as nx
 from networkx.generators.lattice import grid_2d_graph
@@ -17,7 +18,7 @@ import encoding_lazy2
 import heuristic
 import queue
 
-min_steps = 2
+min_steps = 3
 
 dimensions_x, dimensions_y, max_steps = 7, 7, 35
 # dimensions_x, dimensions_y, max_steps = 9, 6, 40
@@ -44,6 +45,18 @@ rmap = {y: x for (x, y) in enc.node_map.items()}
 
 done = {}
 
+def add_done(seq):
+    c_d = done
+    for cen in seq[:-1]:
+        if cen not in c_d:
+            c_d[cen] = {}
+        c_d = c_d[cen]
+        if c_d == 1:
+            break
+
+    if c_d != 1:
+        c_d[seq[-1]] = 1
+
 if os.path.exists(outp_file):
     with open(outp_file) as inp:
         for cline in inp:
@@ -52,17 +65,12 @@ if os.path.exists(outp_file):
                 cline = cline[1:-1]
                 entries = cline.split(")")[:-1]
                 entries = [x[x.index("(")+1:] for x in entries]
-
-                c_d = done
-                for ce in entries[:-1]:
+                entries2 = []
+                for ce in entries:
                     fields = ce.split(",")
                     x, y = int(fields[0].strip()), int(fields[1].strip())
-                    if (x, y) not in c_d:
-                        c_d[(x, y)] = {}
-                    c_d = c_d[(x, y)]
-                fields = entries[-1].split(",")
-                x, y = int(fields[0].strip()), int(fields[1].strip())
-                c_d[(x, y)] = 1
+                    entries2.append((x, y))
+                add_done(entries2)
 
 def generate_instances(cgg, c_minsteps, created):
     q = []
@@ -130,9 +138,8 @@ def generate_instances(cgg, c_minsteps, created):
                 if cg[cn][cn2]["red"]:
                     rdg += 1
 
-        candidates = []
-
-        for n1 in cg.nodes:
+        cnodes = sorted(cg.nodes, reverse=True)
+        for ci, n1 in enumerate(cnodes):
             if len(cs) == 1 and cs[0][0] == 1 and cs[0][1] == 5:
                 rnode = rmap[n1]
                 midx = dimensions_x // 2 + dimensions_x % 2 - 1
@@ -140,7 +147,7 @@ def generate_instances(cgg, c_minsteps, created):
                 if rnode[0] > midx or rnode[1] > midy:
                     continue
 
-            for n2 in cg.nodes:
+            for n2 in cnodes[:ci]:
                 if n1 < n2:
                     # if c_done is not None and (n1, n2) in c_done and c_done[(n1, n2)] == 1:
                     #     continue
@@ -151,7 +158,7 @@ def generate_instances(cgg, c_minsteps, created):
                     n2nb.discard(n1)
                     nbdiff = n1nb ^ n2nb
 
-                    if len(nbdiff) > 3:
+                    if len(nbdiff) > 3 or (c_done is not None and (n1, n2) in c_done and c_done[(n1, n2)] == 1):
                         continue
 
                     nonlex = any(x[0] > n1 for x in cs)
@@ -216,6 +223,20 @@ def generate_instances(cgg, c_minsteps, created):
                     if nonlex:
                         continue
 
+                    indices = []
+                    for i, past_entry in enumerate(cs):
+                        if i > 0 and past_entry[1] == n1:
+                            indices.append(i)
+
+                    if len(indices) > 0:
+                        for cnum in range(1, len(indices)+1):
+                            for cc in combinations(indices, cnum):
+                                ncs = list(cs)
+                                for cidx in cc:
+                                    ncs[cidx] = (ncs[cidx][0], n2)
+                                ncs.append((n1, n2))
+                                add_done(ncs)
+
                     q.append((cg, (n1, n2), cs, changed, at_limit_new, decreased))
 
 
@@ -236,7 +257,7 @@ def compute_graph(args):
 
 if __name__ == '__main__':
     # cnt = 1
-    # for cx in generate_instances(gn, 2):
+    # for cx in generate_instances(gn, min_steps, []):
     #     print(f"{cnt} {cx}")
     #     cnt += 1
     # exit(0)
@@ -267,6 +288,7 @@ if __name__ == '__main__':
                             if isinstance(tww, list):
                                 print(f"Tried {tww}")
                                 outp.write(f"{tww}" + os.linesep)
+                                add_done(tww)
                                 outp.flush()
                             else:
                                 print(f"Succeeded {tww}")
