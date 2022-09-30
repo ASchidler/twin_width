@@ -14,18 +14,19 @@ from concurrent.futures import TimeoutError
 
 import encoding
 import encoding2
+import encoding3
 import encoding_lazy2
 import heuristic
 import queue
 
-min_steps = 3
+min_steps = 11
 
-dimensions_x, dimensions_y, max_steps = 7, 7, 35
+dimensions_x, dimensions_y, max_steps = 4, 4, 12
 # dimensions_x, dimensions_y, max_steps = 9, 6, 40
 
 outp_file = f"dimensions_{dimensions_x}_{dimensions_y}.done"
 
-timeout = 60
+timeout = 3600
 
 targets = []
 
@@ -44,6 +45,7 @@ for cn1, cn2 in gn.edges:
 rmap = {y: x for (x, y) in enc.node_map.items()}
 
 done = {}
+seen = set()
 
 def add_done(seq):
     c_d = done
@@ -56,6 +58,22 @@ def add_done(seq):
 
     if c_d != 1:
         c_d[seq[-1]] = 1
+
+
+def check_seen(c_part):
+    nk = []
+    for ck, cv in sorted(c_part.items()):
+        nk.append(tuple(cv))
+
+    nk = tuple(nk)
+
+    if nk in seen:
+        return True
+    else:
+        seen.add(nk)
+
+    return False
+
 
 if os.path.exists(outp_file):
     with open(outp_file) as inp:
@@ -72,14 +90,17 @@ if os.path.exists(outp_file):
                     entries2.append((x, y))
                 add_done(entries2)
 
+
 def generate_instances(cgg, c_minsteps, created):
     q = []
-    q.append((cgg, (1, 2), [], defaultdict(bool), set(), []))
-    q.append((cgg, (1, 4), [], defaultdict(bool), set(), []))
-    q.append((cgg, (1, 5), [], defaultdict(bool), set(), []))
+
+    cparts = dict()
+    q.append((cgg, (1, 2), [], defaultdict(bool), [], cparts))
+    q.append((cgg, (1, 4), [], defaultdict(bool), [], cparts))
+    q.append((cgg, (1, 5), [], defaultdict(bool), [], cparts))
 
     while q:
-        cg, cm, cs, changed, at_limit, decreased = q.pop()
+        cg, cm, cs, changed, decreased, parts = q.pop()
         cs = list(cs)
         decreased = list(decreased)
         new_decreased = set()
@@ -132,12 +153,6 @@ def generate_instances(cgg, c_minsteps, created):
         cg.remove_node(n1)
         decreased.append(new_decreased)
 
-        for cn in cg.nodes:
-            rdg = 0
-            for cn2 in cg.neighbors(cn):
-                if cg[cn][cn2]["red"]:
-                    rdg += 1
-
         cnodes = sorted(cg.nodes, reverse=True)
         for ci, n1 in enumerate(cnodes):
             if len(cs) == 1 and cs[0][0] == 1 and cs[0][1] == 5:
@@ -149,8 +164,8 @@ def generate_instances(cgg, c_minsteps, created):
 
             for n2 in cnodes[:ci]:
                 if n1 < n2:
-                    # if c_done is not None and (n1, n2) in c_done and c_done[(n1, n2)] == 1:
-                    #     continue
+                    if c_done is not None and (n1, n2) in c_done and c_done[(n1, n2)] == 1:
+                        continue
 
                     n1nb = set(cg.neighbors(n1))
                     n2nb = set(cg.neighbors(n2))
@@ -158,19 +173,15 @@ def generate_instances(cgg, c_minsteps, created):
                     n2nb.discard(n1)
                     nbdiff = n1nb ^ n2nb
 
-                    if len(nbdiff) > 3 or (c_done is not None and (n1, n2) in c_done and c_done[(n1, n2)] == 1):
+                    if len(nbdiff) > 3:
                         continue
 
+                    # Enforce lex order whenever the contraction does not influence any previously influenced vertex
                     nonlex = any(x[0] > n1 for x in cs)
-                    went_limit = False
                     if nonlex and not changed[n1] and not changed[n2] and all(changed[x] == False for x in nbdiff):
                         continue
 
-                    b_rdg = 0
-                    for cn in cg.neighbors(n2):
-                        if cg[n2][cn]["red"]:
-                            b_rdg += 1
-
+                    # Check if red degree of n2 would be exceeded
                     rdg = 0
                     for cn in n2nb - nbdiff:
                         if cg[n2][cn]["red"]:
@@ -182,11 +193,16 @@ def generate_instances(cgg, c_minsteps, created):
                     if rdg + len(nbdiff) > 3:
                         continue
 
-                    if b_rdg < 3 and rdg + len(nbdiff) == 3:
-                        went_limit = True
-
-                    exceeded = False
                     went_limit = []
+                    ordg = 0
+                    for cn in n2nb:
+                        if cg[n2][cn]["red"]:
+                            ordg += 1
+                    if ordg < 3 and rdg + len(nbdiff) == 3:
+                        went_limit.append(n2)
+
+                    # Check if any adjacent vertex would be exceeded
+                    exceeded = False
                     for cn in nbdiff:
                         if (cg.has_edge(n1, cn) and cg[n1][cn]["red"]) or (cg.has_edge(n2, cn) and cg[n2][cn]["red"]):
                             continue
@@ -206,12 +222,6 @@ def generate_instances(cgg, c_minsteps, created):
                     if exceeded:
                         continue
 
-                    if went_limit:
-                        at_limit_new = set(at_limit)
-                        at_limit_new.add(n1)
-                    else:
-                        at_limit_new = at_limit
-
                     nonlex = False
                     for i, (myn1, _) in enumerate(reversed(cs)):
                         if any(x in decreased[-i] for x in went_limit):
@@ -225,35 +235,53 @@ def generate_instances(cgg, c_minsteps, created):
 
                     indices = []
                     for i, past_entry in enumerate(cs):
-                        if i > 0 and past_entry[1] == n1:
+                        if (i > 0 or n2 in [2, 4, 5]) and past_entry[1] == n1:
                             indices.append(i)
 
-                    if len(indices) > 0:
-                        for cnum in range(1, len(indices)+1):
-                            for cc in combinations(indices, cnum):
-                                ncs = list(cs)
-                                for cidx in cc:
-                                    ncs[cidx] = (ncs[cidx][0], n2)
-                                ncs.append((n1, n2))
-                                add_done(ncs)
+                    # if len(indices) > 0:
+                    #     for cnum in range(1, len(indices)+1):
+                    #         for cc in combinations(indices, cnum):
+                    #             ncs = list(cs)
+                    #             for cidx in cc:
+                    #                 ncs[cidx] = (ncs[cidx][0], n2)
+                    #             ncs.append((n1, n2))
+                    #             add_done(ncs)
 
-                    q.append((cg, (n1, n2), cs, changed, at_limit_new, decreased))
+                    new_parts = {x: list(y) for x, y in parts.items()}
+                    if n2 not in new_parts:
+                        new_parts[n2] = [n2]
+
+                    if n1 in new_parts:
+                        new_parts[n2].extend(new_parts[n1])
+                        new_parts.pop(n1)
+                    else:
+                        new_parts[n2].append(n1)
+                    new_parts[n2].sort()
+
+                    # If we already have a queue entry with a low enough tww that has the same partitioning, skip
+                    if check_seen(new_parts):
+                        continue
+
+                    q.append((cg, (n1, n2), cs, changed, decreased, new_parts))
 
 
 def compute_graph(args):
     ord = [x for x, y in args]
     mg = {x: y for x, y in args}
 
-    cenc = encoding2.TwinWidthEncoding2(g, cubic=2, sb_ord=True, sb_static=2 * len(g.nodes) // 3, sb_static_full=True,
-                                       is_grid=True)
+    cenc = encoding2.TwinWidthEncoding2(g, cubic=0, sb_ord=False, sb_static=0, sb_static_full=False,
+                                       is_grid=False)
 
     # cenc = encoding.TwinWidthEncoding(use_sb_static=True, use_sb_static_full=True)
-    result = cenc.run(g, solver=Cadical, start_bound=3, i_od=ord, i_mg=mg, verbose=False, steps_limit=max_steps)
+    cenc = encoding3.TwinWidthEncoding2(g, cubic=0, sb_ord=False, sb_static=0, sb_static_full=False,
+                                        is_grid=False)
+    result = cenc.run(g, solver=Cadical, start_bound=3, i_od=ord, i_mg=mg, verbose=False, steps_limit=None)
 
     if isinstance(result, int) or len(result) == 2:
         return args
     else:
         return result
+
 
 if __name__ == '__main__':
     # cnt = 1
@@ -264,18 +292,6 @@ if __name__ == '__main__':
 
     with open(outp_file, "a") as outp:
         with open(outp_file+".to", "a") as outp_to:
-            # with Pool(pool_size) as pool:
-            #     for tww in pool.imap_unordered(compute_graph, generate_instances(gn), chunksize=100):
-            # if isinstance(tww, list):
-            #     print(f"Tried {tww}")
-            #     outp.write(f"{tww}" + os.linesep)
-            #     outp.flush()
-            # else:
-            #     print(f"Succeeded {tww}")
-            #     outp.write(f"! {tww}")
-            #     outp.flush()
-            #     exit(0)
-
             for c_steps in range(min_steps, max_steps):
                 c_created = []
                 cnt = 0
@@ -292,7 +308,7 @@ if __name__ == '__main__':
                                 outp.flush()
                             else:
                                 print(f"Succeeded {tww}")
-                                outp.write(f"! {tww}")
+                                outp.write(f"! {tww}" + os.linesep)
                                 outp.flush()
                                 exit(0)
                         except StopIteration as ee:

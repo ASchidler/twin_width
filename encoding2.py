@@ -58,11 +58,6 @@ class TwinWidthEncoding2:
             for i in range(1, len(g.nodes)+1):
                 for j in range(i+1, len(g.nodes)+1):
                     self.merge[i][j] = self.pool.id(f"merge{i}_{j}")
-            if self.cubic == 1:
-                self.merged_at = [{} for _ in range(0, len(g.nodes) + 1)]
-                for t in range(2, steps):
-                    for j in range(1, len(g.nodes) + 1):
-                        self.merged_at[t][j] = self.pool.id(f"ma{t}_{j}")
         else:
             for t in range(1, steps):
                 for j in range(1, len(g.nodes)+1):
@@ -84,8 +79,8 @@ class TwinWidthEncoding2:
     def encode_order(self, n, steps):
         # Assign one node to each time step
         for t in range(1, steps):
-            self.formula.append([-self.ord[t][n]])
-            self.formula.append([-self.ord[t][n - 1]])
+            if t < n:
+                self.formula.append([-self.ord[t][n]])
             self.formula.extend(
                 CardEnc.atmost([self.ord[t][i] for i in range(1, n+1)], bound=1, vpool=self.pool))
             self.formula.append([self.ord[t][i] for i in range(1, n + 1)])
@@ -106,8 +101,6 @@ class TwinWidthEncoding2:
             for t in range(1, steps):
                 for i in range(1, n + 1):
                     for j in range(i+1, n + 1):
-                        if t > 1 and self.cubic == 1:
-                            self.formula.append([-self.ord[t][i], -self.merge[i][j], self.merged_at[t][j]])
                         for t2 in range(1, t):
                             self.formula.append([-self.ord[t][i], -self.merge[i][j], -self.ord[t2][j]])
         else:
@@ -233,7 +226,7 @@ class TwinWidthEncoding2:
         for i in range(1, n + 1):
             inb = set(g.neighbors(i))
             for t in range(1, steps):
-                for j in range(i+1 if self.cubic < 2 else 1, n+1):
+                for j in range((i+1) if self.cubic < 2 else 1, n+1):
                     if i == j:
                         continue
 
@@ -244,7 +237,7 @@ class TwinWidthEncoding2:
                     diff.discard(j)
 
                     for k in diff:
-                        if self.cubic < 2:
+                        if self.cubic == 0:
                             start = [-self.ord[t][i], -self.merge[i][j], self.tred(t, j, k)]
                         else:
                             start = [-self.ord[t][i], -self.merge[t][j], self.tred(t, j, k)]
@@ -272,9 +265,10 @@ class TwinWidthEncoding2:
                     for j in range(1, n+1):
                         if i == j:
                             continue
-                        self.formula.append([self.ord[t][i], self.ord[t][j], -self.tred(t - 1, i, j), self.tred(t, i, j)])
-                        if self.cubic == 1:
-                            self.formula.append([-self.merged_at[t][i], -self.merged_edge[t][j], self.tred(t, i, j)])
+                        if i < j:
+                            self.formula.append([self.ord[t][i], self.ord[t][j], -self.tred(t - 1, i, j), self.tred(t, i, j)])
+                            if self.cubic == 1:
+                                self.formula.append([-self.merged_at[t][i], -self.merged_edge[t][j], self.tred(t, i, j)])
                         elif self.cubic == 2:
                             self.formula.append([-self.merge[t][i], -self.merged_edge[t][j], self.tred(t, i, j)])
 
@@ -319,7 +313,8 @@ class TwinWidthEncoding2:
 
         if od is not None:
             for i, u in enumerate(od):
-                self.formula.append([self.ord[i+1][u]])
+                if i + 1 < steps:
+                    self.formula.append([self.ord[i+1][u]])
 
         if mg is not None:
             if self.cubic == 2:
@@ -328,7 +323,6 @@ class TwinWidthEncoding2:
             else:
                 for k, v in mg.items():
                     self.formula.append([self.merge[k][v]])
-
 
         self.encode_order(n, steps)
         self.encode_merge(n, steps)
@@ -340,7 +334,8 @@ class TwinWidthEncoding2:
         if self.twohop:
             self.sb_twohop(n, g, steps, True)
 
-        self.encode_sb_static(n, d, g, steps)
+        if self.sb_static > 0:
+            self.encode_sb_static(n, d, g, steps)
 
         if self.is_grid:
             self.formula.append([self.ord[1][1]])

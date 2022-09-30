@@ -378,8 +378,8 @@ class TwinWidthEncoding:
                 c_max = max(c_max, cc)
             cnt += 1
         #print(f"Done {c_max}/{d}")
-        od = [unmap[x] for x in od]
-        mg = {unmap[x]: unmap[y] for x, y in mg.items()}
+        # od = [unmap[x] for x in od]
+        # mg = {unmap[x]: unmap[y] for x, y in mg.items()}
         if c_max > d:
             print(f"Error: Bound exceeded {c_max}/{d}")
         return c_max, od, mg
