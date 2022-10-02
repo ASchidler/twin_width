@@ -1,30 +1,22 @@
-import ctypes
 import os
-import sys
-from multiprocessing import Pool, Process
-from copy import copy
-from pebble import ProcessPool
-from itertools import combinations
-
-import networkx as nx
-from networkx.generators.lattice import grid_2d_graph
-from pysat.solvers import Cadical
 from collections import defaultdict
 from concurrent.futures import TimeoutError
+from copy import copy
+
+from networkx.generators.lattice import grid_2d_graph
+from pebble import ProcessPool
+from pysat.solvers import Cadical
 
 import encoding
 import encoding2
-import encoding3
-import encoding_lazy2
-import heuristic
-import queue
 
-min_steps = 11
+min_steps = 30
 
-dimensions_x, dimensions_y, max_steps = 4, 4, 12
-# dimensions_x, dimensions_y, max_steps = 9, 6, 40
+# dimensions_x, dimensions_y, max_steps = 6, 6, 31
+dimensions_x, dimensions_y, max_steps = 9, 6, 44
 
 outp_file = f"dimensions_{dimensions_x}_{dimensions_y}.done"
+verify = False
 
 timeout = 3600
 
@@ -45,6 +37,7 @@ for cn1, cn2 in gn.edges:
 rmap = {y: x for (x, y) in enc.node_map.items()}
 
 done = {}
+verified = set()
 seen = set()
 
 def add_done(seq):
@@ -75,29 +68,35 @@ def check_seen(c_part):
     return False
 
 
-if os.path.exists(outp_file):
-    with open(outp_file) as inp:
-        for cline in inp:
-            cline = cline.strip()
-            if cline.startswith("["):
-                cline = cline[1:-1]
-                entries = cline.split(")")[:-1]
-                entries = [x[x.index("(")+1:] for x in entries]
-                entries2 = []
-                for ce in entries:
-                    fields = ce.split(",")
-                    x, y = int(fields[0].strip()), int(fields[1].strip())
-                    entries2.append((x, y))
-                add_done(entries2)
+target_files = [outp_file] if not verify else [outp_file, outp_file + ".verified"]
+
+for i, c_output in enumerate(target_files):
+    if os.path.exists(c_output):
+        with open(c_output) as inp:
+            for cline in inp:
+                cline = cline.strip()
+                if cline.startswith("["):
+                    cline = cline[1:-1]
+                    entries = cline.split(")")[:-1]
+                    entries = [x[x.index("(")+1:] for x in entries]
+                    entries2 = []
+                    for ce in entries:
+                        fields = ce.split(",")
+                        x, y = int(fields[0].strip()), int(fields[1].strip())
+                        entries2.append((x, y))
+                    if i == 0:
+                        add_done(entries2)
+                    else:
+                        verified.add(tuple(entries2))
 
 
 def generate_instances(cgg, c_minsteps, created):
     q = []
 
     cparts = dict()
-    q.append((cgg, (1, 2), [], defaultdict(bool), [], cparts))
-    q.append((cgg, (1, 4), [], defaultdict(bool), [], cparts))
-    q.append((cgg, (1, 5), [], defaultdict(bool), [], cparts))
+    q.append((cgg, (1, 2), [], defaultdict(bool), [], {2: [1, 2]}))
+    q.append((cgg, (1, 4), [], defaultdict(bool), [], {4: [1, 4]}))
+    q.append((cgg, (1, 5), [], defaultdict(bool), [], {5: [1, 5]}))
 
     while q:
         cg, cm, cs, changed, decreased, parts = q.pop()
@@ -133,13 +132,13 @@ def generate_instances(cgg, c_minsteps, created):
         changed[n1] = True
         changed[n2] = True
 
-        if cg.has_edge(n1, n2) and cg[n1][n2]["red"]:
-            if all(cg.has_edge(n2, x) and cg[n2][x]["red"] for x in nbdiff):
-                new_decreased.add(n2)
-
         for cn in n1nb:
             if cg[n1][cn]["red"]:
                 nbdiff.add(cn)
+
+        if cg.has_edge(n1, n2) and cg[n1][n2]["red"]:
+            if all(cg.has_edge(n2, x) and cg[n2][x]["red"] for x in nbdiff):
+                new_decreased.add(n2)
 
         for cn in nbdiff:
             if cg.has_edge(n1, cn) and cg.has_edge(n2, cn) and cg[n2][cn]["red"] and cg[n1][cn]["red"]:
@@ -150,6 +149,7 @@ def generate_instances(cgg, c_minsteps, created):
                 cg.add_edge(n2, cn, red=True)
             else:
                 cg[n2][cn]["red"] = True
+
         cg.remove_node(n1)
         decreased.append(new_decreased)
 
@@ -186,8 +186,8 @@ def generate_instances(cgg, c_minsteps, created):
                     for cn in n2nb - nbdiff:
                         if cg[n2][cn]["red"]:
                             rdg += 1
-                    for cn in n1nb - nbdiff:
-                        if cg[n1][cn]["red"]:
+                    for cn in n1nb & n2nb:
+                        if cg[n1][cn]["red"] and not cg[n2][cn]["red"]:
                             rdg += 1
 
                     if rdg + len(nbdiff) > 3:
@@ -222,60 +222,55 @@ def generate_instances(cgg, c_minsteps, created):
                     if exceeded:
                         continue
 
+                    # Check if non-lexicographic order is justified
                     nonlex = False
+
                     for i, (myn1, _) in enumerate(reversed(cs)):
-                        if any(x in decreased[-i] for x in went_limit):
+                        if any(x in decreased[-i-1] for x in went_limit):
                             break
 
                         if myn1 > n1:
                             nonlex = True
                             break
+
+                        #c_justified.add(justified[-])
                     if nonlex:
                         continue
 
-                    indices = []
-                    for i, past_entry in enumerate(cs):
-                        if (i > 0 or n2 in [2, 4, 5]) and past_entry[1] == n1:
-                            indices.append(i)
-
-                    # if len(indices) > 0:
-                    #     for cnum in range(1, len(indices)+1):
-                    #         for cc in combinations(indices, cnum):
-                    #             ncs = list(cs)
-                    #             for cidx in cc:
-                    #                 ncs[cidx] = (ncs[cidx][0], n2)
-                    #             ncs.append((n1, n2))
-                    #             add_done(ncs)
-
-                    new_parts = {x: list(y) for x, y in parts.items()}
-                    if n2 not in new_parts:
-                        new_parts[n2] = [n2]
-
-                    if n1 in new_parts:
-                        new_parts[n2].extend(new_parts[n1])
-                        new_parts.pop(n1)
-                    else:
-                        new_parts[n2].append(n1)
-                    new_parts[n2].sort()
-
-                    # If we already have a queue entry with a low enough tww that has the same partitioning, skip
-                    if check_seen(new_parts):
-                        continue
+                    new_parts = parts
+                    # new_parts = {x: list(y) for x, y in parts.items()}
+                    # if n2 not in new_parts:
+                    #     new_parts[n2] = [n2]
+                    #
+                    # if n1 in new_parts:
+                    #     new_parts[n2].extend(new_parts[n1])
+                    #     new_parts.pop(n1)
+                    # else:
+                    #     new_parts[n2].append(n1)
+                    # new_parts[n2].sort()
+                    #
+                    # # If we already have a queue entry with a low enough tww that has the same partitioning, skip
+                    # if check_seen(new_parts):
+                    #     continue
 
                     q.append((cg, (n1, n2), cs, changed, decreased, new_parts))
 
 
-def compute_graph(args):
+def compute_graph(argsx):
+    args, enc = argsx
     ord = [x for x, y in args]
     mg = {x: y for x, y in args}
 
-    cenc = encoding2.TwinWidthEncoding2(g, cubic=0, sb_ord=False, sb_static=0, sb_static_full=False,
-                                       is_grid=False)
+    if enc == 0:
+        cenc = encoding2.TwinWidthEncoding2(g, cubic=2, sb_ord=True, sb_static=1, sb_static_full=False,
+                                           is_grid=False)
+    elif enc == 1:
+        cenc = encoding2.TwinWidthEncoding2(g, cubic=2, sb_ord=False, sb_static=0, sb_static_full=False,
+                                            is_grid=False)
+    else:
+        cenc = encoding.TwinWidthEncoding(use_sb_static=True, use_sb_static_full=True)
 
-    # cenc = encoding.TwinWidthEncoding(use_sb_static=True, use_sb_static_full=True)
-    cenc = encoding3.TwinWidthEncoding2(g, cubic=0, sb_ord=False, sb_static=0, sb_static_full=False,
-                                        is_grid=False)
-    result = cenc.run(g, solver=Cadical, start_bound=3, i_od=ord, i_mg=mg, verbose=False, steps_limit=None)
+    result = cenc.run(g, solver=Cadical, start_bound=3, i_od=ord, i_mg=mg, verbose=False, steps_limit=max_steps)
 
     if isinstance(result, int) or len(result) == 2:
         return args
@@ -283,20 +278,39 @@ def compute_graph(args):
         return result
 
 
-if __name__ == '__main__':
-    # cnt = 1
-    # for cx in generate_instances(gn, min_steps, []):
-    #     print(f"{cnt} {cx}")
-    #     cnt += 1
-    # exit(0)
+def generate_verification():
+    q = [([k], v) for k, v in done.items()]
 
-    with open(outp_file, "a") as outp:
+    while q:
+        c_entry, c_entry_v = q.pop()
+        if c_entry_v == 1:
+            if tuple(c_entry) not in verified:
+                yield c_entry
+        else:
+            for ck, cv in c_entry_v.items():
+                nl = list(c_entry)
+                nl.append(ck)
+                q.append((nl, cv))
+
+
+if __name__ == '__main__':
+    cnt = 1
+    for cx in generate_instances(gn, min_steps, []) if not verify else generate_verification():
+        print(f"{cnt} {cx}")
+        cnt += 1
+    exit(0)
+
+    with open(outp_file if not verify else outp_file+".verified", "a") as outp:
         with open(outp_file+".to", "a") as outp_to:
             for c_steps in range(min_steps, max_steps):
                 c_created = []
                 cnt = 0
                 with ProcessPool(max_workers=pool_size) as pool:
-                    future = pool.map(compute_graph, generate_instances(gn, c_steps, c_created), chunksize=1, timeout=timeout)
+                    if not verify:
+                        future = pool.map(compute_graph, ((x, i) for x in generate_instances(gn, c_steps, c_created) for i in range(0, 3)), chunksize=1, timeout=timeout)
+                    else:
+                        future = pool.map(compute_graph, generate_verification(), chunksize=1, timeout=timeout)
+
                     it = future.result()
                     while True:
                         try:
@@ -314,9 +328,12 @@ if __name__ == '__main__':
                         except StopIteration as ee:
                             break
                         except TimeoutError as error:
-                            print(f"Timeout {c_created[cnt]}")
-                            outp_to.write(f"{c_created[cnt]}{os.linesep}")
-                            outp_to.flush()
+                            if not verify:
+                                print(f"Timeout {c_created[cnt]}")
+                                outp_to.write(f"{c_created[cnt]}{os.linesep}")
+                                outp_to.flush()
+                            else:
+                                print("Timeout")
                         finally:
                             cnt += 1
                 print(f"Finished {c_steps}")

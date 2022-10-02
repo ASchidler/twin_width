@@ -91,7 +91,7 @@ class TwinWidthEncoding:
 
         if mg is not None:
             for k, v in mg.items():
-                formula.append([-self.merge[k][v]])
+                formula.append([self.merge[k][v]])
 
         # Encode relationships
         # Transitivity
