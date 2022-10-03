@@ -11,7 +11,11 @@ from pysat.solvers import Cadical
 import encoding
 import encoding2
 
-min_steps = 25
+min_steps = 5
+timeout = 3600
+use_seen = True
+verify = False
+pool_size = 4
 
 if len(sys.argv) > 1 and int(sys.argv[1]) > 0:
     dimensions_x, dimensions_y, max_steps = 7, 7, 35
@@ -19,17 +23,13 @@ else:
     dimensions_x, dimensions_y, max_steps = 9, 6, 44
 
 outp_file = f"dimensions_{dimensions_x}_{dimensions_y}.done"
-verify = False
-
-timeout = 60
+enc_count = 3
 
 targets = []
 
 g = grid_2d_graph(dimensions_x, dimensions_y)
 
 results = {}
-
-pool_size = 4
 
 enc = encoding2.TwinWidthEncoding2(g)
 gn = enc.remap_graph(g)
@@ -42,8 +42,6 @@ rmap = {y: x for (x, y) in enc.node_map.items()}
 done = {}
 verified = set()
 seen = set()
-
-enc_count = 3
 
 def add_done(seq):
     c_d = done
@@ -91,6 +89,23 @@ for i, c_output in enumerate(target_files):
                         entries2.append((x, y))
                     if i == 0:
                         add_done(entries2)
+
+                        if use_seen:
+                            new_parts = {}
+
+                            for (n1, n2) in entries2:
+                                if n2 not in new_parts:
+                                    new_parts[n2] = [n2]
+
+                                if n1 in new_parts:
+                                    new_parts[n2].extend(new_parts[n1])
+                                    new_parts.pop(n1)
+                                else:
+                                    new_parts[n2].append(n1)
+                            for cv in new_parts.values():
+                                cv.sort()
+
+                            check_seen(new_parts)
                     else:
                         verified.add(tuple(entries2))
 
@@ -109,9 +124,6 @@ def generate_instances(cgg, c_minsteps, created):
         new_decreased = set()
         cs.append(cm)
         changed = copy(changed)
-
-        if len(created) > 1:
-            continue
 
         if len(cs) >= c_minsteps:
             created.append(cs)
@@ -245,20 +257,21 @@ def generate_instances(cgg, c_minsteps, created):
                         continue
 
                     new_parts = parts
-                    # new_parts = {x: list(y) for x, y in parts.items()}
-                    # if n2 not in new_parts:
-                    #     new_parts[n2] = [n2]
-                    #
-                    # if n1 in new_parts:
-                    #     new_parts[n2].extend(new_parts[n1])
-                    #     new_parts.pop(n1)
-                    # else:
-                    #     new_parts[n2].append(n1)
-                    # new_parts[n2].sort()
-                    #
-                    # # If we already have a queue entry with a low enough tww that has the same partitioning, skip
-                    # if check_seen(new_parts):
-                    #     continue
+                    if use_seen:
+                        new_parts = {x: list(y) for x, y in parts.items()}
+                        if n2 not in new_parts:
+                            new_parts[n2] = [n2]
+
+                        if n1 in new_parts:
+                            new_parts[n2].extend(new_parts[n1])
+                            new_parts.pop(n1)
+                        else:
+                            new_parts[n2].append(n1)
+                        new_parts[n2].sort()
+
+                        # If we already have a queue entry with a low enough tww that has the same partitioning, skip
+                        if check_seen(new_parts):
+                            continue
 
                     q.append((cg, (n1, n2), cs, changed, decreased, new_parts))
 
