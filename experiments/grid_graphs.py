@@ -1,4 +1,5 @@
 import os
+import sys
 from collections import defaultdict
 from concurrent.futures import TimeoutError
 from copy import copy
@@ -10,15 +11,17 @@ from pysat.solvers import Cadical
 import encoding
 import encoding2
 
-min_steps = 30
+min_steps = 25
 
-# dimensions_x, dimensions_y, max_steps = 6, 6, 31
-dimensions_x, dimensions_y, max_steps = 9, 6, 44
+if len(sys.argv) > 1 and int(sys.argv[1]) > 0:
+    dimensions_x, dimensions_y, max_steps = 7, 7, 35
+else:
+    dimensions_x, dimensions_y, max_steps = 9, 6, 44
 
 outp_file = f"dimensions_{dimensions_x}_{dimensions_y}.done"
 verify = False
 
-timeout = 3600
+timeout = 60
 
 targets = []
 
@@ -39,6 +42,8 @@ rmap = {y: x for (x, y) in enc.node_map.items()}
 done = {}
 verified = set()
 seen = set()
+
+enc_count = 3
 
 def add_done(seq):
     c_d = done
@@ -93,7 +98,6 @@ for i, c_output in enumerate(target_files):
 def generate_instances(cgg, c_minsteps, created):
     q = []
 
-    cparts = dict()
     q.append((cgg, (1, 2), [], defaultdict(bool), [], {2: [1, 2]}))
     q.append((cgg, (1, 4), [], defaultdict(bool), [], {4: [1, 4]}))
     q.append((cgg, (1, 5), [], defaultdict(bool), [], {5: [1, 5]}))
@@ -105,6 +109,9 @@ def generate_instances(cgg, c_minsteps, created):
         new_decreased = set()
         cs.append(cm)
         changed = copy(changed)
+
+        if len(created) > 1:
+            continue
 
         if len(cs) >= c_minsteps:
             created.append(cs)
@@ -307,14 +314,15 @@ if __name__ == '__main__':
                 cnt = 0
                 with ProcessPool(max_workers=pool_size) as pool:
                     if not verify:
-                        future = pool.map(compute_graph, ((x, i) for x in generate_instances(gn, c_steps, c_created) for i in range(0, 3)), chunksize=1, timeout=timeout)
+                        future = pool.map(compute_graph, ((x, i) for x in generate_instances(gn, c_steps, c_created) for i in range(0, enc_count)), chunksize=1, timeout=timeout)
                     else:
-                        future = pool.map(compute_graph, generate_verification(), chunksize=1, timeout=timeout)
+                        future = pool.map(compute_graph, ((x, i) for x in generate_verification() for i in range(0, enc_count)), chunksize=1, timeout=timeout)
 
                     it = future.result()
                     while True:
                         try:
                             tww = next(it)
+                            print(tww)
                             if isinstance(tww, list):
                                 print(f"Tried {tww}")
                                 outp.write(f"{tww}" + os.linesep)
@@ -328,9 +336,10 @@ if __name__ == '__main__':
                         except StopIteration as ee:
                             break
                         except TimeoutError as error:
+                            print("to")
                             if not verify:
-                                print(f"Timeout {c_created[cnt]}")
-                                outp_to.write(f"{c_created[cnt]}{os.linesep}")
+                                print(f"Timeout {c_created[cnt % enc_count]}")
+                                outp_to.write(f"{c_created[cnt % enc_count]}{os.linesep}")
                                 outp_to.flush()
                             else:
                                 print("Timeout")
