@@ -1,5 +1,6 @@
 import sys
 import time
+from collections import defaultdict
 
 from networkx import Graph
 from pysat.card import CardEnc, EncType, ITotalizer
@@ -47,12 +48,13 @@ class TwinWidthEncoding2:
 
         return gn
 
-    def init_var(self, g, steps):
+    def init_var(self, g, steps, d):
         self.red = [[{} for _ in range(0, len(g.nodes) + 1)] for _ in range(0, len(g.nodes) + 1)]
         self.ord = [{} for _ in range(0, len(g.nodes) + 1)]
         self.merge = [{} for _ in range(0, len(g.nodes) + 1)]
         self.cardvars = [[] for _ in range(0, len(g.nodes) + 1)]
-        self.static_card = [{} for _ in range(0, len(g.nodes) + 1)]
+        self.static_card = [[{} for _ in range(0, len(g.nodes) + 1)] for _ in range(0, len(g.nodes) + 1)]
+        self.counters = [[{} for _ in range(0, len(g.nodes) + 1)] for _ in range(0, len(g.nodes) + 1)]
 
         if self.cubic < 2:
             for i in range(1, len(g.nodes)+1):
@@ -75,6 +77,11 @@ class TwinWidthEncoding2:
 
                 for j in range(i + 1, len(g.nodes) + 1):
                     self.red[t][i][j] = self.pool.id(f"red{t}_{i}_{j}")
+
+        for t in range(1, steps):
+            for i in range(1, len(g.nodes) + 1):
+                for x in range(1, d+1):
+                    self.counters[t][i][x] = self.pool.id(f"counters_{t}_{i}_{x}")
 
     def encode_order(self, n, steps):
         # Assign one node to each time step
@@ -267,7 +274,7 @@ class TwinWidthEncoding2:
         else:
             return self.red[t][j][i]
 
-    def encode_red(self, n, g, steps):
+    def encode_red(self, n, g, steps, d):
         for i in range(1, n + 1):
             inb = set(g.neighbors(i))
             for t in range(1, steps):
@@ -286,16 +293,26 @@ class TwinWidthEncoding2:
                             start = [-self.ord[t][i], -self.merge[i][j], self.tred(t, j, k)]
                         else:
                             start = [-self.ord[t][i], -self.merge[t][j], self.tred(t, j, k)]
+
                         for t2 in range(1, t):
                             start.append(self.ord[t2][k])
                         self.formula.append(start)
 
-                    # if self.sb_ord and i < j and self.cubic == 2:
-                    #     for k in set(range(1, n+1)) - diff - {i, j}:
-                    #         if t > 1:
-                    #             self.formula.append([-self.merge[t][j], -self.ord[t][i], self.tred(t-1, j, k), self.tred(t-1, i, k), -self.tred(t, j, k)])
-                    #         else:
-                    #             self.formula.append([-self.merge[t][j], -self.ord[t][i], -self.tred(t, j, k)])
+                        other = list(start)
+                        start.pop()
+                        if t > 1:
+                            other.extend([self.tred(t-1, j, k), self.tred(t-1, i, k), self.pool.id(f"increase_{t}_{k}")])
+                        else:
+                            other.append(self.pool.id(f"increase_{t}_{k}"))
+                        self.formula.append(other)
+
+                    for k in set(range(1, n + 1)) - diff - {i, j}:
+                        if t > 1:
+                            self.formula.append(
+                                [-self.merge[t][j], -self.ord[t][i], self.tred(t - 1, j, k), self.tred(t - 1, i, k),
+                                 -self.tred(t, j, k)])
+                        else:
+                            self.formula.append([-self.merge[t][j], -self.ord[t][i], -self.tred(t, j, k)])
 
                     # Transfer from merge source to merge target
                     if self.cubic == 0 and t > 1:
@@ -304,13 +321,13 @@ class TwinWidthEncoding2:
                                 continue
                             self.formula.append([-self.ord[t][i], -self.merge[i][j], -self.tred(t-1, i, k), self.tred(t, j, k)])
 
-                    if self.sb_ord and i < j and self.cubic == 2:
-                        if t > 1:
-                            self.formula.append(
-                                [-self.tred(t, i, j), self.tred(t-1, i, j), self.merge[t][j], self.merge[t][i]])
-                        else:
-                            self.formula.append(
-                                [-self.tred(t, i, j), self.merge[t][j], self.merge[t][i]])
+                    # if self.sb_ord and i < j and self.cubic == 2:
+                    if t > 1:
+                        self.formula.append(
+                            [-self.tred(t, i, j), self.tred(t-1, i, j), self.merge[t][j], self.merge[t][i]])
+                    else:
+                        self.formula.append(
+                            [-self.tred(t, i, j), self.merge[t][j], self.merge[t][i]])
 
                 # Maintain all other red arcs
                 if t > 1:
@@ -322,6 +339,54 @@ class TwinWidthEncoding2:
                         if self.cubic == 2:
                             self.formula.append([-self.merge[t][i], -self.merged_edge[t][j], self.tred(t, i, j)])
 
+        for t in range(1, steps):
+            for i in range(1, n+1):
+                for j in range(1, n+1):
+                    if i != j:
+                        start = [-self.merge[t][j], -self.tred(t, i, j), self.pool.id(f"red_count_{t}_{i}")]
+                        for t2 in range(1, t):
+                            start.append(self.ord[t2][i])
+                        self.formula.append(start)
+
+        for i in range(1, n + 1):
+            self.formula.append([-self.pool.id(f"increase_{1}_{i}"), self.counters[1][i][1]])
+
+        for t in range(2, steps-1):
+            for i in range(1, n+1):
+                # Increase
+                self.formula.append([-self.pool.id(f"increase_{t}_{i}"), self.counters[t][i][1]])
+                for x in range(1, d):
+                    self.formula.append(
+                        [-self.pool.id(f"increase_{t}_{i}"), -self.counters[t - 1][i][x], self.counters[t][i][x + 1]])
+                # Exceed
+                self.formula.append([-self.pool.id(f"increase_{t}_{i}"), -self.counters[t - 1][i][d]])
+
+                for x in range(1, d + 1):
+                    self.formula.append([-self.counters[t-1][i][x], self.counters[t][i][x]])
+
+                aux = self.pool.id(f"preexists_{t}_{i}")
+                for j in range(1, n+1):
+                    if i != j:
+                        self.formula.append([-self.ord[t][j], -self.tred(t - 1, i, j), aux])
+                        self.formula.append([-self.ord[t][j], self.tred(t - 1, i, j), -aux])
+
+                        # Maintain & Reduce
+                        for x in range(1, d+1):
+                            self.formula.append(
+                                [self.merge[t][i], -self.merge[t][j], self.tred(t-1, i, j), -aux, -self.counters[t-1][i][x], self.counters[t][i][x]])
+                            self.formula.append(
+                                [self.merge[t][i], -self.merge[t][j], -self.tred(t-1, i, j), aux, -self.counters[t-1][i][x], self.counters[t][i][x]])
+
+                        for x in range(2, d+1):
+                            if x > 1:
+                                self.formula.append(
+                                    [self.merge[t][i], -self.merge[t][j], -self.tred(t-1, i, j), -aux, -self.counters[t-1][i][x], self.counters[t][i][x-1]])
+
+        for t in range(1, steps-1):
+            for i in range(1, n+1):
+                for x in range(1, d+1):
+                    self.formula.append([-self.merge[t][i], -self.cardvars[t][x-1], self.counters[t][i][x]])
+
     def encode_counters(self, g, d, steps):
         if self.sb_ord:
             self.cardvars.append([])  # Start indexing from 0
@@ -330,26 +395,25 @@ class TwinWidthEncoding2:
             #     vars = [self.merged_edge[t][j] for j in range(1, len(g.nodes) + 1)]
             #     self.formula.extend(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
 
-            for i in range(1, len(g.nodes) + 1):
-                vars = [self.tred(t, i, j) for j in range(1, len(g.nodes)+1) if i != j]
-                if self.sb_ord:
-                    # with ITotalizer(vars, ubound=d, top_id=self.pool.id(f"totalizer{t}_{i}")) as tot:
-                    #     self.formula.extend(tot.cnf)
-                    #     self.pool.occupy(self.pool.top - 1, tot.top_id)
-                    #     self.formula.append([-tot.rhs[d]])
-                    #     self.cardvars[t].append(list(tot.rhs))
+            vars = [self.pool.id(f"red_count_{t}_{i}") for i in range(1, len(g.nodes)+1) ]
+            if self.sb_ord:
+                # with ITotalizer(vars, ubound=d, top_id=self.pool.id(f"totalizer{t}_{i}")) as tot:
+                #     self.formula.extend(tot.cnf)
+                #     self.pool.occupy(self.pool.top - 1, tot.top_id)
+                #     self.formula.append([-tot.rhs[d]])
+                #     self.cardvars[t].append(list(tot.rhs))
 
-                    form, cvars = tools.encode_cards_exact(self.pool, vars, d, f"cardvars_{t}_{i}")
-                    self.formula.extend(form)
-                    self.cardvars[t].append(cvars)
-                else:
-                    with ITotalizer(vars, ubound=d, top_id=self.pool.id(f"totalizer{t}_{i}")) as tot:
-                        self.formula.extend(tot.cnf)
-                        self.pool.occupy(self.pool.top - 1, tot.top_id)
-                        self.formula.append([-tot.rhs[d]])
-                        self.cardvars[t].append(list(tot.rhs))
+                form, cvars = tools.encode_cards_exact(self.pool, vars, d, f"cardvars_{t}")
+                self.formula.extend(form)
+                self.cardvars[t] = cvars
+            else:
+                with ITotalizer(vars, ubound=d, top_id=self.pool.id(f"totalizer_{t}")) as tot:
+                    self.formula.extend(tot.cnf)
+                    self.pool.occupy(self.pool.top - 1, tot.top_id)
+                    self.formula.append([-tot.rhs[d]])
+                    self.cardvars[t] = list(tot.rhs)
 
-                    # self.formula.extend(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
+                # self.formula.extend(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
 
     def encode(self, g, d, od=None, mg=None, steps=None):
         if steps is None:
@@ -359,7 +423,7 @@ class TwinWidthEncoding2:
         n = len(g.nodes)
         self.pool = IDPool()
         self.formula = CNF()
-        self.init_var(g, steps)
+        self.init_var(g, steps, d)
 
         if od is not None:
             for i, u in enumerate(od):
@@ -377,8 +441,8 @@ class TwinWidthEncoding2:
 
         self.encode_order(n, steps)
         self.encode_merge(n, steps)
-        self.encode_red(n, g, steps)
         self.encode_counters(g, d, steps)
+        self.encode_red(n, g, steps, d)
 
         if self.sb_ord:
             self.encode_sb_order(n, d, steps)
@@ -579,8 +643,19 @@ class TwinWidthEncoding2:
                             print(f"Missing red edge in step {step}")
 
                 if cc > d:
-                    print(f"Exceeded bound in step {step}")
+                    climit = 0
+                    for x in range(1, d+1):
+                        if model[self.counters[step][self.node_map[u]][x]]:
+                            climit = x
+                    print(f"Exceeded bound in step {step}, node {u}, {cc}/{climit}")
                 c_max = max(c_max, cc)
+            #
+            # for i in range(1, len(g.nodes) + 1):
+            #     for j in range(i+1, len(g.nodes) + 1):
+            #         if model[self.tred(step, i, j)]:
+            #             u2, v2 = unmap[i], unmap[j]
+            #             if not g.has_edge(u2, v2) or not g[u2][v2]["red"]:
+            #                 print(f"Excess red edge {u2} {v2}")
 
             step += 1
         return c_max, od, mg
