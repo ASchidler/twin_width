@@ -10,12 +10,14 @@ from pysat.solvers import Cadical
 
 import encoding
 import encoding2
+import encoding_lazy2
 
-min_steps = 5
+min_steps = 4
 timeout = 3600
-use_seen = True
+use_seen = False
 verify = False
-pool_size = 4
+pool_size = 1
+enc_count = 1
 
 if len(sys.argv) > 1 and int(sys.argv[1]) > 0:
     dimensions_x, dimensions_y, max_steps = 7, 7, 35
@@ -23,7 +25,6 @@ else:
     dimensions_x, dimensions_y, max_steps = 9, 6, 44
 
 outp_file = f"dimensions_{dimensions_x}_{dimensions_y}.done"
-enc_count = 3
 
 targets = []
 
@@ -284,13 +285,14 @@ def compute_graph(argsx):
     if enc == 0:
         cenc = encoding2.TwinWidthEncoding2(g, cubic=2, sb_ord=True, sb_static=1, sb_static_full=False,
                                            is_grid=False)
+        cenc = encoding_lazy2.TwinWidthEncoding2(g, cubic=True, sb_ord=True, sb_static=1)
     elif enc == 1:
         cenc = encoding2.TwinWidthEncoding2(g, cubic=2, sb_ord=False, sb_static=0, sb_static_full=False,
                                             is_grid=False)
     else:
         cenc = encoding.TwinWidthEncoding(use_sb_static=True, use_sb_static_full=True)
 
-    result = cenc.run(g, solver=Cadical, start_bound=3, i_od=ord, i_mg=mg, verbose=False, steps_limit=max_steps)
+    result = cenc.run(g, solver=Cadical, start_bound=3, i_od=ord, i_mg=mg, verbose=True, steps_limit=max_steps)
 
     if isinstance(result, int) or len(result) == 2:
         return args
@@ -314,11 +316,11 @@ def generate_verification():
 
 
 if __name__ == '__main__':
-    cnt = 1
-    for cx in generate_instances(gn, min_steps, []) if not verify else generate_verification():
-        print(f"{cnt} {cx}")
-        cnt += 1
-    exit(0)
+    # cnt = 1
+    # for cx in generate_instances(gn, min_steps, []) if not verify else generate_verification():
+    #     print(f"{cnt} {cx}")
+    #     cnt += 1
+    # exit(0)
 
     with open(outp_file if not verify else outp_file+".verified", "a") as outp:
         with open(outp_file+".to", "a") as outp_to:
@@ -335,7 +337,6 @@ if __name__ == '__main__':
                     while True:
                         try:
                             tww = next(it)
-                            print(tww)
                             if isinstance(tww, list):
                                 print(f"Tried {tww}")
                                 outp.write(f"{tww}" + os.linesep)
@@ -349,10 +350,9 @@ if __name__ == '__main__':
                         except StopIteration as ee:
                             break
                         except TimeoutError as error:
-                            print("to")
                             if not verify:
-                                print(f"Timeout {c_created[cnt % enc_count]}")
-                                outp_to.write(f"{c_created[cnt % enc_count]}{os.linesep}")
+                                print(f"Timeout {c_created[cnt // enc_count]}")
+                                outp_to.write(f"{c_created[cnt // enc_count]}{os.linesep}")
                                 outp_to.flush()
                             else:
                                 print("Timeout")

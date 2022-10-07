@@ -336,13 +336,13 @@ class TwinWidthEncoding2:
                     self.formula.extend(form)
                     self.cardvars[t].append(cvars)
                 else:
-                    with ITotalizer(vars, ubound=d, top_id=self.pool.id(f"totalizer{t}_{i}")) as tot:
-                        self.formula.extend(tot.cnf)
-                        self.pool.occupy(self.pool.top - 1, tot.top_id)
-                        self.formula.append([-tot.rhs[d]])
-                        self.cardvars[t].append(list(tot.rhs))
+                    # with ITotalizer(vars, ubound=d, top_id=self.pool.id(f"totalizer{t}_{i}")) as tot:
+                    #     self.formula.extend(tot.cnf)
+                    #     self.pool.occupy(self.pool.top - 1, tot.top_id)
+                    #     self.formula.append([-tot.rhs[d]])
+                    #     self.cardvars[t].append(list(tot.rhs))
 
-                    # self.formula.extend(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
+                    self.formula.extend(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
 
     def encode(self, g, d, od=None, mg=None, steps=None):
         if steps is None:
