@@ -16,9 +16,9 @@ g, steps_limit = grid_2d_graph(6, 6), 31
 # enc = encoding2.TwinWidthEncoding2(g, cubic=2, sb_ord=False, sb_static=0, sb_static_full=False, is_grid=False)
 #
 # enc.run(g, solver=slv.Cadical, start_bound=3, steps_limit=steps_limit)
-
-enc = encoding3.TwinWidthEncoding2(g, cubic=2, sb_static=sys.maxsize, sb_ord=False, sb_static_full=True, sb_static_diff=True)
-enc.run(g, slv.Cadical, 3)
+print(len(g.nodes))
+enc = encoding3.TwinWidthEncoding2(g, cubic=2, sb_static=0, sb_ord=True, sb_static_full=True, sb_static_diff=True)
+enc.run(g, slv.Cadical, 3, steps_limit=steps_limit)
 
 # encl = lazy.TwinWidthEncoding2(g, cubic=True, sb_ord=True, sb_static=len(g.nodes)//2, sb_red=False, use_sb_static_full=True)
 # encl.run(g, solver=slv.Cadical, start_bound=3)

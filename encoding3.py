@@ -142,30 +142,6 @@ class TwinWidthEncoding2:
         if d == 0:
             return
 
-        # for t in range(2, steps):
-        #     c_step_almosts = []
-        #     aux_step = self.pool.id(f"card_aux_step_{t}")
-        #     for i in range(1, n+1):
-        #         aux = self.pool.id(f"card_aux_{t}_{i}")
-        #         self.formula.append([self.cardvars[t-1][i-1][-2], -self.cardvars[t][i-1][-2], aux])
-        #         self.formula.append([-aux, -self.cardvars[t - 1][i-1][-2]])
-        #         self.formula.append([-aux, self.cardvars[t][i-1][-2]])
-        #         self.formula.append([-aux, aux_step])
-        #         c_step_almosts.append(aux)
-        #     c_step_almosts.append(-aux_step)
-        #     self.formula.append(c_step_almosts)
-
-        # c_step_almosts = [self.cardvars[t][x][-2] for x in range(0, n)]
-        # for t in range(2, steps):
-        #     aux_step = self.pool.id(f"card_aux_step_{t}")
-        #     for i in range(1, n + 1):
-        #         for j in range(i + 1, n + 1):
-        #             for t2 in range(1, t):
-        #                 clause = [-self.ord[t2][j], -self.ord[t][i], aux_step]
-        #                 for t3 in range(t2+1, t):
-        #                     clause.append(self.pool.id(f"card_aux_step_{t3}"))
-        #                 self.formula.append(clause)
-
         for t in range(2, steps-1):
             for i in range(1, n+1):
                 aux_dec = self.pool.id(f"ord_dec_{t}_{i}")
@@ -180,33 +156,20 @@ class TwinWidthEncoding2:
                 self.formula.append(clause)
 
         for t in range(2, steps):
-            c_step_almosts = []
-
             for i in range(1, n+1):
-                aux = self.pool.id(f"card_aux_{t}_{i}")
-                self.formula.append([self.counters[t-1][i][d], -self.counters[t][i][d], aux])
-                self.formula.append([-aux, -self.counters[t-1][i][d]])
-                self.formula.append([-aux, self.counters[t][i][d]])
-                c_step_almosts.append(aux)
-            self.formula.append(c_step_almosts)
-
-        for t in range(2, steps):
-            for t2 in range(max(1, t - max_diff), t):
-                aux = self.pool.id(f"gap_ok_{t}_{t2}")
-                start_clause = [self.pool.id(f"card_aux_{t}_{i}") for i in range(1, n+1)]
-                start_clause.append(-aux)
-                self.formula.append(start_clause)
-                for i in range(1, n+1):
-                    clause = [-aux, -self.pool.id(f"card_aux_{t}_{i}")]
+                for t2 in range(max(1, t - max_diff), t):
+                    aux = self.pool.id(f"card_aux_{t}_{t2}_{i}")
                     for t3 in range(t2, t):
-                        clause.append(self.pool.id(f"ord_dec_{t3}_{i}"))
-                    self.formula.append(clause)
+                        self.formula.append([self.counters[t-1][i][d], -self.counters[t][i][d], -self.pool.id(f"ord_dec_{t3}_{i}"), aux])
+                    self.formula.append([-aux, -self.counters[t-1][i][d]])
+                    self.formula.append([-aux, self.counters[t][i][d]])
+                    self.formula.append([-aux, *[self.pool.id(f"ord_dec_{t3}_{i}") for t3 in range(t2, t+1)]])
 
         for t in range(2, steps):
             for i in range(1, n + 1):
                 for j in range(i + 1, n + 1):
                     for t2 in range(max(1, t - max_diff), t):
-                        self.formula.append([-self.ord[t2][j], -self.ord[t][i], self.pool.id(f"gap_ok_{t}_{t2}")])
+                        self.formula.append([-self.ord[t2][j], -self.ord[t][i], *[self.pool.id(f"card_aux_{t}_{t2}_{k}") for k in range(1, n+1)]])
 
     def encode_sb_static(self, n, d, g, steps):
         for n1 in range(1, n+1):
@@ -331,8 +294,8 @@ class TwinWidthEncoding2:
                     if t > 1:
                         self.formula.append(
                             [-self.tred(t, i, j), self.tred(t-1, i, j), self.merge[t][j], self.merge[t][i]])
-                        clause1.append(self.merged_edge[t][j])
-                        clause2.append(self.merged_edge[t][i])
+                        clause1.extend([self.merged_edge[t][j], self.tred(t-1, i, j)])
+                        clause2.extend([self.merged_edge[t][i], self.tred(t-1, i, j)])
                         self.formula.append(clause1)
                         self.formula.append(clause2)
                     else:
@@ -351,92 +314,88 @@ class TwinWidthEncoding2:
                         if self.cubic == 2:
                             self.formula.append([-self.merge[t][i], -self.merged_edge[t][j], self.tred(t, i, j)])
 
-
+    def encode_vertex_counters(self, n, d, steps):
         # Counting
         # First, move the merge targets red edges to red_count
         for t in range(1, steps):
-            for i in range(1, n+1):
-                for j in range(1, n+1):
+            for i in range(1, n + 1):
+                for j in range(1, n + 1):
                     if i != j:
-                        start = [-self.merge[t][j], -self.tred(t, i, j), self.pool.id(f"red_count_{t}_{i}")]
-                        # for t2 in range(1, t+1):
-                        #     start.append(self.ord[t2][i])
-                        self.formula.append(start)
+                        self.formula.append([-self.merge[t][j], -self.tred(t, i, j), self.pool.id(f"red_count_{t}_{i}")])
 
         # Next, use the cardinality constraint for counting
-        for t in range(1, steps-1):
-            for i in range(1, n+1):
-                for x in range(1, d+1):
-                    self.formula.append([-self.merge[t][i], -self.cardvars[t][x-1], self.counters[t][i][x]])
+        for t in range(1, steps - 1):
+            for i in range(1, n + 1):
+                for x in range(1, d + 1):
+                    self.formula.append([-self.merge[t][i], -self.cardvars[t][x - 1], self.counters[t][i][x]])
 
         # Next, handle all other counters
-        for t in range(1, steps-1):
-            for i in range(1, n+1):
-                aux_now = self.pool.id(f"nowexists_{t}_{i}")
+        for t in range(1, steps):
+            for i in range(1, n + 1):
+                aux_now = self.pool.id(f"red_count_{t}_{i}")
 
                 if t == 1:
                     self.formula.append([self.merge[t][i], -aux_now, self.counters[t][i][1]])
 
                     if self.sb_ord:
                         self.formula.append([self.merge[t][i], aux_now, -self.counters[t][i][1]])
-                        for x in range(2, d+1):
+                        for x in range(2, d + 1):
                             self.formula.append([self.merge[t][i], -self.counters[t][i][d]])
                 else:
-                    aux_source = self.pool.id(f"preexists_{t}_{i}")
+                    aux_source = self.merged_edge[t][i]
                     aux_target = self.pool.id(f"mergeexists_{t}_{i}")
                     prefix = [self.merge[t][i], aux_source, aux_target, -aux_now, ]
+
+                    # Increase counters
                     self.formula.append([*prefix, self.counters[t][i][1]])
                     for x in range(1, d):
-                        self.formula.append([*prefix, -self.counters[t-1][i][x], self.counters[t][i][x+1]])
-                    self.formula.append([*prefix, -self.counters[t - 1][i][d]])
+                        self.formula.append([*prefix, -self.counters[t - 1][i][x], self.counters[t][i][x + 1]])
+                    self.formula.append([*prefix, -self.counters[t - 1][i][d]])  # Exceeds
 
-                    for x in range(1, d+1):
-                        self.formula.append([self.merge[t][i], -self.counters[t-1][i][x], aux_source, self.counters[t][i][x]])
-                        self.formula.append([self.merge[t][i], -self.counters[t-1][i][x], aux_target, self.counters[t][i][x]])
+                    # Maintain
+                    for x in range(1, d + 1):
+                        self.formula.append([self.merge[t][i], -self.counters[t - 1][i][x], aux_source,
+                                             self.counters[t][i][x]])
+                        self.formula.append(
+                            [self.merge[t][i], -self.counters[t - 1][i][x], aux_target, self.counters[t][i][x]])
 
-                    for x in range(2, d+1):
-                        self.formula.append([self.merge[t][i], -aux_source, -aux_target, -aux_now, -self.counters[t - 1][i][x], self.counters[t][i][x - 1]])
+                    # Decrease
+                    for x in range(2, d + 1):
+                        self.formula.append(
+                            [self.merge[t][i], -aux_target, -aux_source, -self.counters[t-1][i][x], self.counters[t][i][x-1]]
+                        )
 
                     if self.sb_ord:
                         for x in range(1, d + 1):
-                            self.formula.append([self.merge[t][i], -self.counters[t-1][i][x], self.counters[t][i][x],
+                            self.formula.append([self.merge[t][i], -self.counters[t - 1][i][x], self.counters[t][i][x],
                                                  aux_source])
-                            self.formula.append([self.merge[t][i], -self.counters[t-1][i][x], self.counters[t][i][x],
+                            self.formula.append([self.merge[t][i], -self.counters[t - 1][i][x], self.counters[t][i][x],
                                                  aux_target])
                             if x > 1:
-                                self.formula.append([self.merge[t][i], -self.counters[t][i][x], self.counters[t-1][i][x-1]])
+                                self.formula.append(
+                                    [self.merge[t][i], -self.counters[t][i][x], self.counters[t - 1][i][x - 1]])
                             if x < d:
                                 self.formula.append(
-                                    [self.merge[t][i], -self.counters[t][i][x], self.counters[t - 1][i][x], -aux_source])
+                                    [self.merge[t][i], -self.counters[t][i][x], self.counters[t - 1][i][x],
+                                     -aux_source])
                                 self.formula.append(
-                                    [self.merge[t][i], -self.counters[t][i][x], self.counters[t - 1][i][x], -aux_target])
+                                    [self.merge[t][i], -self.counters[t][i][x], self.counters[t - 1][i][x],
+                                     -aux_target])
 
-                for j in range(1, n+1):
+                for j in range(1, n + 1):
                     if i != j:
                         if t > 1:
-                            self.formula.append([-self.ord[t][j], -self.tred(t - 1, i, j), aux_source])
-                            self.formula.append([-self.ord[t][j], self.tred(t - 1, i, j), -aux_source])
-                            self.formula.append([-self.merge[t][j], -self.tred(t-1, i, j), aux_target])
-                            self.formula.append([-self.merge[t][j], self.tred(t-1, i, j), -aux_target])
-                        self.formula.append([-self.merge[t][j], -self.tred(t, i, j), aux_now])
-                        self.formula.append([-self.merge[t][j], self.tred(t, i, j), -aux_now])
+                            self.formula.append([-self.merge[t][j], -self.tred(t - 1, i, j), aux_target])
+                            self.formula.append([-self.merge[t][j], self.tred(t - 1, i, j), -aux_target])
 
     def encode_counters(self, g, d, steps):
-        if self.sb_ord:
-            self.cardvars.append([])  # Start indexing from 0
         for t in range(1, steps):  # As last one is the root, no counter needed
-            # if self.cubic > 0 and t > 1:
-            #     vars = [self.merged_edge[t][j] for j in range(1, len(g.nodes) + 1)]
-            #     self.formula.extend(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
-
-            vars = [self.pool.id(f"red_count_{t}_{i}") for i in range(1, len(g.nodes)+1) ]
+            vars = [self.pool.id(f"red_count_{t}_{i}") for i in range(1, len(g.nodes)+1)]
             with ITotalizer(vars, ubound=d, top_id=self.pool.id(f"totalizer_{t}")) as tot:
                 self.formula.extend(tot.cnf)
                 self.pool.occupy(self.pool.top - 1, tot.top_id)
                 self.formula.append([-tot.rhs[d]])
                 self.cardvars[t] = list(tot.rhs)
-
-                # self.formula.extend(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
 
     def encode(self, g, d, od=None, mg=None, steps=None):
         if steps is None:
@@ -466,6 +425,7 @@ class TwinWidthEncoding2:
         self.encode_merge(n, steps)
         self.encode_counters(g, d, steps)
         self.encode_red(n, g, steps, d)
+        self.encode_vertex_counters(n, d, steps)
 
         if self.sb_ord:
             self.encode_sb_order(n, d, steps)
