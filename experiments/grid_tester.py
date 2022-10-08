@@ -8,8 +8,8 @@ import encoding_lazy2 as lazy
 import encoding2
 
 # g, steps_limit = grid_2d_graph(7, 7), 35
-g, steps_limit = grid_2d_graph(9, 6), 44 # 46 (43)
-# g, steps_limit = grid_2d_graph(6, 6), 31
+# g, steps_limit = grid_2d_graph(9, 6), 44 # 46 (43)
+g, steps_limit = grid_2d_graph(6, 6), 31
 
 #enc = encoding.TwinWidthEncoding(use_sb_static=True, use_sb_static_full=True)
 enc = encoding2.TwinWidthEncoding2(g, cubic=2, sb_ord=True, sb_static=1, sb_static_full=False, is_grid=True)

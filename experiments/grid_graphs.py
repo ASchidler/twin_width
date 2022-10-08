@@ -11,7 +11,7 @@ from pysat.solvers import Cadical
 import encoding
 import encoding2
 
-min_steps = 5
+min_steps = 6
 timeout = 3600
 use_seen = True
 verify = False
@@ -113,12 +113,13 @@ for i, c_output in enumerate(target_files):
 def generate_instances(cgg, c_minsteps, created):
     q = []
 
-    q.append((cgg, (1, 2), [], defaultdict(bool), [], {2: [1, 2]}))
-    q.append((cgg, (1, 4), [], defaultdict(bool), [], {4: [1, 4]}))
-    q.append((cgg, (1, 5), [], defaultdict(bool), [], {5: [1, 5]}))
+    # TODO: There are actually more initial contractions!
+    q.append((cgg, (1, 2), [], defaultdict(bool), [], {2: [1, 2]}, [], set()))
+    q.append((cgg, (1, 4), [], defaultdict(bool), [], {4: [1, 4]}, [], set()))
+    q.append((cgg, (1, 5), [], defaultdict(bool), [], {5: [1, 5]}, [], set()))
 
     while q:
-        cg, cm, cs, changed, decreased, parts = q.pop()
+        cg, cm, cs, changed, decreased, parts, c_edges, justified = q.pop()
         cs = list(cs)
         decreased = list(decreased)
         new_decreased = set()
@@ -151,6 +152,30 @@ def generate_instances(cgg, c_minsteps, created):
         changed[n1] = True
         changed[n2] = True
 
+        c_edges = [list(cel) for cel in c_edges]
+        justified = set(justified)
+
+        for cei in range(0, len(c_edges)):
+            cel = c_edges[cei]
+            found_any = False
+            for ci in range(0, len(cel)):
+                ced = cel[ci]
+                if ced[0] == n1 and ced[1] == n2:
+                    found_any = True
+                    break
+                if ced[0] == n1 or ced[1] == n1:
+                    cn = ced[0] if ced[1] == n1 else ced[1]
+
+                    if cg.has_edge(cn, n2) and cg[cn][n2]["red"]:
+                        found_any = True
+                        break
+                    else:
+                        c_edges[cei][ci] = (min(n2, cn), max(cn, n2))
+
+            if found_any:
+                justified.add(cei)
+                c_edges[cei].clear()
+
         for cn in n1nb:
             if cg[n1][cn]["red"]:
                 nbdiff.add(cn)
@@ -159,18 +184,30 @@ def generate_instances(cgg, c_minsteps, created):
             if all(cg.has_edge(n2, x) and cg[n2][x]["red"] for x in nbdiff):
                 new_decreased.add(n2)
 
+        new_edges = []
         for cn in nbdiff:
             if cg.has_edge(n1, cn) and cg.has_edge(n2, cn) and cg[n2][cn]["red"] and cg[n1][cn]["red"]:
                 new_decreased.add(cn)
 
             changed[cn] = True
             if not cg.has_edge(n2, cn):
+                new_edges.append((min(n2, cn), max(n2, cn)))
                 cg.add_edge(n2, cn, red=True)
             else:
-                cg[n2][cn]["red"] = True
+                if not cg[n2][cn]["red"]:
+                    cg[n2][cn]["red"] = True
+                    new_edges.append((min(n2, cn), max(n2, cn)))
+
+        decreased.append(new_decreased)
+
+        if n1 > len(cs):
+            c_edges.append(new_edges)
+        else:
+            c_edges.append([])
 
         cg.remove_node(n1)
-        decreased.append(new_decreased)
+
+
 
         cnodes = sorted(cg.nodes, reverse=True)
         for ci, n1 in enumerate(cnodes):
@@ -245,10 +282,13 @@ def generate_instances(cgg, c_minsteps, created):
                     nonlex = False
 
                     for i, (myn1, _) in enumerate(reversed(cs)):
-                        if any(x in decreased[-i-1] for x in went_limit):
-                            break
-
                         if myn1 > n1:
+                            if any(x in decreased[-i-1] for x in went_limit):
+                                continue
+
+                            if len(cs) - i - 1 in justified:
+                                continue
+
                             nonlex = True
                             break
 
@@ -273,7 +313,7 @@ def generate_instances(cgg, c_minsteps, created):
                         if check_seen(new_parts):
                             continue
 
-                    q.append((cg, (n1, n2), cs, changed, decreased, new_parts))
+                    q.append((cg, (n1, n2), cs, changed, decreased, new_parts, c_edges, justified))
 
 
 def compute_graph(argsx):
