@@ -10,20 +10,23 @@ from pysat.solvers import Cadical
 
 import encoding
 import encoding2
+import encoding3
+import encoding_lazy2
 
 min_steps = 6
 timeout = 3600
-use_seen = True
+use_seen = False
 verify = False
-pool_size = 4
+pool_size = 3
+enc_count = 1
+consolidate = False
 
 if len(sys.argv) > 1 and int(sys.argv[1]) > 0:
     dimensions_x, dimensions_y, max_steps = 7, 7, 35
 else:
     dimensions_x, dimensions_y, max_steps = 9, 6, 44
 
-outp_file = f"dimensions_{dimensions_x}_{dimensions_y}.done"
-enc_count = 3
+outp_file = f"/media/asc/4ED79AA0509E44AA/dimensions_{dimensions_x}_{dimensions_y}.done"
 
 targets = []
 
@@ -42,6 +45,8 @@ rmap = {y: x for (x, y) in enc.node_map.items()}
 done = {}
 verified = set()
 seen = set()
+
+children = defaultdict(int)
 
 def add_done(seq):
     c_d = done
@@ -109,6 +114,27 @@ for i, c_output in enumerate(target_files):
                     else:
                         verified.add(tuple(entries2))
 
+if consolidate:
+    q = [([k], v) for k, v in done.items()]
+    entries = []
+
+    while q:
+        c_entry, c_entry_v = q.pop()
+        if c_entry_v == 1:
+            if tuple(c_entry) not in verified:
+                entries.append(c_entry)
+        else:
+            for ck, cv in c_entry_v.items():
+                nl = list(c_entry)
+                nl.append(ck)
+                q.append((nl, cv))
+
+    entries.sort(key=lambda x: (len(x), x))
+    with open(outp_file+".consolidated", "a") as outp:
+        for c_entry in entries:
+            outp.write(f"{c_entry}{os.linesep}")
+
+    exit(0)
 
 def generate_instances(cgg, c_minsteps, created):
     q = []
@@ -125,32 +151,6 @@ def generate_instances(cgg, c_minsteps, created):
         new_decreased = set()
         cs.append(cm)
         changed = copy(changed)
-
-        if len(cs) >= c_minsteps:
-            created.append(cs)
-            yield cs
-            continue
-
-        c_done = done
-        for centry in cs:
-            if c_done == 1:
-                break
-            if centry in c_done:
-                c_done = c_done[centry]
-            else:
-                c_done = None
-                break
-
-        cg = cg.copy()
-        n1, n2 = cm
-        n1nb = set(cg.neighbors(n1))
-        n2nb = set(cg.neighbors(n2))
-        n1nb.discard(n2)
-        n2nb.discard(n1)
-        nbdiff = n1nb ^ n2nb
-
-        changed[n1] = True
-        changed[n2] = True
 
         c_edges = [list(cel) for cel in c_edges]
         justified = set(justified)
@@ -180,10 +180,12 @@ def generate_instances(cgg, c_minsteps, created):
             if cg[n1][cn]["red"]:
                 nbdiff.add(cn)
 
-        if cg.has_edge(n1, n2) and cg[n1][n2]["red"]:
-            if all(cg.has_edge(n2, x) and cg[n2][x]["red"] for x in nbdiff):
-                new_decreased.add(n2)
+        if len(cs) >= c_minsteps:
+            created.append(cs)
+            yield cs
+            continue
 
+<<<<<<< HEAD
         new_edges = []
         for cn in nbdiff:
             if cg.has_edge(n1, cn) and cg.has_edge(n2, cn) and cg[n2][cn]["red"] and cg[n1][cn]["red"]:
@@ -208,66 +210,96 @@ def generate_instances(cgg, c_minsteps, created):
         cg.remove_node(n1)
 
 
+=======
+            c_done = done
+            for centry in cs:
+                if c_done == 1:
+                    break
+                if centry in c_done:
+                    c_done = c_done[centry]
+                else:
+                    c_done = None
+                    break
 
-        cnodes = sorted(cg.nodes, reverse=True)
-        for ci, n1 in enumerate(cnodes):
-            if len(cs) == 1 and cs[0][0] == 1 and cs[0][1] == 5:
-                rnode = rmap[n1]
-                midx = dimensions_x // 2 + dimensions_x % 2 - 1
-                midy = dimensions_y // 2 + dimensions_y % 2 - 1
-                if rnode[0] > midx or rnode[1] > midy:
-                    continue
+            cg = cg.copy()
+            n1, n2 = cm
+            n1nb = set(cg.neighbors(n1))
+            n2nb = set(cg.neighbors(n2))
+            n1nb.discard(n2)
+            n2nb.discard(n1)
+            nbdiff = n1nb ^ n2nb
 
-            for n2 in cnodes[:ci]:
-                if n1 < n2:
-                    if c_done is not None and (n1, n2) in c_done and c_done[(n1, n2)] == 1:
+            changed[n1] = True
+            changed[n2] = True
+>>>>>>> 5f96bc4936dccad79610d08a2edef37c2a59d0b4
+
+            for cn in n1nb:
+                if cg[n1][cn]["red"]:
+                    nbdiff.add(cn)
+
+            if cg.has_edge(n1, n2) and cg[n1][n2]["red"]:
+                if all(cg.has_edge(n2, x) and cg[n2][x]["red"] for x in nbdiff):
+                    new_decreased.add(n2)
+
+            for cn in nbdiff:
+                if cg.has_edge(n1, cn) and cg.has_edge(n2, cn) and cg[n2][cn]["red"] and cg[n1][cn]["red"]:
+                    new_decreased.add(cn)
+
+                changed[cn] = True
+                if not cg.has_edge(n2, cn):
+                    cg.add_edge(n2, cn, red=True)
+                else:
+                    cg[n2][cn]["red"] = True
+
+            cg.remove_node(n1)
+            decreased.append(new_decreased)
+
+            cnodes = sorted(cg.nodes, reverse=True)
+            for ci, n1 in enumerate(cnodes):
+                # diagonally = True
+                # for xn1, xn2 in cs:
+                #     xn1 = rmap[xn1]
+                #     xn2 = rmap[xn2]
+                #     if xn1[0] != xn1[1] or xn2[0] != xn2[1]:
+                #         diagonally = False
+                #         break
+
+                if len(cs) == 1 and cs[0][0] == 1 and cs[0][1] == 5:
+                    rnode = rmap[n1]
+                    midx = dimensions_x // 2 + dimensions_x % 2 - 1
+                    midy = dimensions_y // 2 + dimensions_y % 2 - 1
+                    if rnode[0] > midx or rnode[1] > midy:
                         continue
 
-                    n1nb = set(cg.neighbors(n1))
-                    n2nb = set(cg.neighbors(n2))
-                    n1nb.discard(n2)
-                    n2nb.discard(n1)
-                    nbdiff = n1nb ^ n2nb
-
-                    if len(nbdiff) > 3:
-                        continue
-
-                    # Enforce lex order whenever the contraction does not influence any previously influenced vertex
-                    nonlex = any(x[0] > n1 for x in cs)
-                    if nonlex and not changed[n1] and not changed[n2] and all(changed[x] == False for x in nbdiff):
-                        continue
-
-                    # Check if red degree of n2 would be exceeded
-                    rdg = 0
-                    for cn in n2nb - nbdiff:
-                        if cg[n2][cn]["red"]:
-                            rdg += 1
-                    for cn in n1nb & n2nb:
-                        if cg[n1][cn]["red"] and not cg[n2][cn]["red"]:
-                            rdg += 1
-
-                    if rdg + len(nbdiff) > 3:
-                        continue
-
-                    went_limit = []
-                    ordg = 0
-                    for cn in n2nb:
-                        if cg[n2][cn]["red"]:
-                            ordg += 1
-                    if ordg < 3 and rdg + len(nbdiff) == 3:
-                        went_limit.append(n2)
-
-                    # Check if any adjacent vertex would be exceeded
-                    exceeded = False
-                    for cn in nbdiff:
-                        if (cg.has_edge(n1, cn) and cg[n1][cn]["red"]) or (cg.has_edge(n2, cn) and cg[n2][cn]["red"]):
+                for n2 in cnodes[:ci]:
+                    if n1 < n2:
+                        if c_done is not None and (n1, n2) in c_done and c_done[(n1, n2)] == 1:
                             continue
 
+                        n1nb = set(cg.neighbors(n1))
+                        n2nb = set(cg.neighbors(n2))
+                        n1nb.discard(n2)
+                        n2nb.discard(n1)
+                        nbdiff = n1nb ^ n2nb
+
+                        if len(nbdiff) > 3:
+                            continue
+
+                        # Enforce lex order whenever the contraction does not influence any previously influenced vertex
+                        nonlex = any(x[0] > n1 for x in cs)
+                        if nonlex and not changed[n1] and not changed[n2] and all(changed[x] == False for x in nbdiff):
+                            continue
+
+                        # Check if red degree of n2 would be exceeded
                         rdg = 0
-                        for cnb in cg.neighbors(cn):
-                            if cg[cn][cnb]["red"]:
+                        for cn in n2nb - nbdiff:
+                            if cg[n2][cn]["red"]:
+                                rdg += 1
+                        for cn in n1nb & n2nb:
+                            if cg[n1][cn]["red"] and not cg[n2][cn]["red"]:
                                 rdg += 1
 
+<<<<<<< HEAD
                         if rdg >= 3:
                             exceeded = True
                             break
@@ -314,7 +346,85 @@ def generate_instances(cgg, c_minsteps, created):
                             continue
 
                     q.append((cg, (n1, n2), cs, changed, decreased, new_parts, c_edges, justified))
+=======
+                        if rdg + len(nbdiff) > 3:
+                            continue
 
+                        went_limit = []
+                        ordg = 0
+                        for cn in n2nb:
+                            if cg[n2][cn]["red"]:
+                                ordg += 1
+                        if ordg < 3 and rdg + len(nbdiff) == 3:
+                            went_limit.append(n2)
+>>>>>>> 5f96bc4936dccad79610d08a2edef37c2a59d0b4
+
+                        # Check if any adjacent vertex would be exceeded
+                        exceeded = False
+                        for cn in nbdiff:
+                            if (cg.has_edge(n1, cn) and cg[n1][cn]["red"]) or (cg.has_edge(n2, cn) and cg[n2][cn]["red"]):
+                                continue
+
+                            rdg = 0
+                            for cnb in cg.neighbors(cn):
+                                if cg[cn][cnb]["red"]:
+                                    rdg += 1
+
+                            if rdg >= 3:
+                                exceeded = True
+                                break
+
+                            if rdg == 2:
+                                went_limit.append(cn)
+
+                        if exceeded:
+                            continue
+
+                        # Check if non-lexicographic order is justified
+                        nonlex = False
+
+                        for i, (myn1, _) in enumerate(reversed(cs)):
+                            if any(x in decreased[-i-1] for x in went_limit):
+                                break
+
+                            if myn1 > n1:
+                                nonlex = True
+                                break
+
+                            #c_justified.add(justified[-])
+                        if nonlex:
+                            continue
+
+                        new_parts = parts
+                        if use_seen:
+                            new_parts = {x: list(y) for x, y in parts.items()}
+                            if n2 not in new_parts:
+                                new_parts[n2] = [n2]
+
+                            if n1 in new_parts:
+                                new_parts[n2].extend(new_parts[n1])
+                                new_parts.pop(n1)
+                            else:
+                                new_parts[n2].append(n1)
+                            new_parts[n2].sort()
+
+                            # If we already have a queue entry with a low enough tww that has the same partitioning, skip
+                            if check_seen(new_parts):
+                                continue
+                        children[tuple(cs)] += 1
+                        q.append((cg, (n1, n2), cs, changed, decreased, new_parts))
+
+            if tuple(cs) not in children:
+                cx = tuple(cs[:-1])
+                while True:
+                    children[cx] -= 1
+                    if children[cx] == 0:
+                        outp.write(f"{list(cx)}{os.linesep}")
+                        children.pop(cx)
+                        print(f"Removed {cx}")
+                        cx = tuple(cx[:-1])
+                    else:
+                        break
 
 def compute_graph(argsx):
     args, enc = argsx
@@ -324,13 +434,14 @@ def compute_graph(argsx):
     if enc == 0:
         cenc = encoding2.TwinWidthEncoding2(g, cubic=2, sb_ord=True, sb_static=1, sb_static_full=False,
                                            is_grid=False)
+        cenc = encoding3.TwinWidthEncoding2(g, cubic=2, sb_ord=False, sb_static=1)
     elif enc == 1:
         cenc = encoding2.TwinWidthEncoding2(g, cubic=2, sb_ord=False, sb_static=0, sb_static_full=False,
                                             is_grid=False)
     else:
         cenc = encoding.TwinWidthEncoding(use_sb_static=True, use_sb_static_full=True)
 
-    result = cenc.run(g, solver=Cadical, start_bound=3, i_od=ord, i_mg=mg, verbose=False, steps_limit=max_steps)
+    result = cenc.run(g, solver=Cadical, start_bound=3, i_od=ord, i_mg=mg, verbose=True, steps_limit=max_steps)
 
     if isinstance(result, int) or len(result) == 2:
         return args
@@ -354,11 +465,12 @@ def generate_verification():
 
 
 if __name__ == '__main__':
-    cnt = 1
-    for cx in generate_instances(gn, min_steps, []) if not verify else generate_verification():
-        print(f"{cnt} {cx}")
-        cnt += 1
-    exit(0)
+    # for csteps in range(min_steps, max_steps):
+    #     cnt = 1
+    #     for cx in generate_instances(gn, csteps, []) if not verify else generate_verification():
+    #         print(f"{csteps}:{cnt} {cx}")
+    #         cnt += 1
+    #     exit(0)
 
     with open(outp_file if not verify else outp_file+".verified", "a") as outp:
         with open(outp_file+".to", "a") as outp_to:
@@ -375,7 +487,6 @@ if __name__ == '__main__':
                     while True:
                         try:
                             tww = next(it)
-                            print(tww)
                             if isinstance(tww, list):
                                 print(f"Tried {tww}")
                                 outp.write(f"{tww}" + os.linesep)
@@ -389,10 +500,9 @@ if __name__ == '__main__':
                         except StopIteration as ee:
                             break
                         except TimeoutError as error:
-                            print("to")
                             if not verify:
-                                print(f"Timeout {c_created[cnt % enc_count]}")
-                                outp_to.write(f"{c_created[cnt % enc_count]}{os.linesep}")
+                                print(f"Timeout {c_created[cnt // enc_count]}")
+                                outp_to.write(f"{c_created[cnt // enc_count]}{os.linesep}")
                                 outp_to.flush()
                             else:
                                 print("Timeout")
