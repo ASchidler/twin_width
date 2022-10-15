@@ -183,8 +183,7 @@ class TwinWidthEncoding2:
         for t in range(2, steps):
             for i in range(2, n+1):
                 exceeded[t][i] = self.pool.id(f"exceeded_{t}_{i}")
-                # self.formula.append([-exceeded[t-1][i], exceeded[t][i]])
-                self.formula.append([exceeded[t-1][i], self.ord[t][i], -exceeded[t][i]])
+                # self.formula.append([-exceeded[t][i], exceeded[t-1][i], self.ord[t][i]])
 
         for t in range(2, steps):
             for i in range(2, n+1):
@@ -196,18 +195,14 @@ class TwinWidthEncoding2:
                             self.formula.append([-ord_dec_t[t][i][j], ord_dec[t][j]])
                         else:
                             self.formula.append([-ord_dec_t[t][i][j], ord_dec[t][j], ord_dec_t[t-1][i][j]])
-                            self.formula.append([-ord_dec_t[t - 1][i][j], ord_dec_t[t][i][j]])
+                            self.formula.append([-ord_dec_t[t - 1][i][j], -exceeded[t][i], ord_dec_t[t][i][j]])
 
+                        self.formula.append([-ord_dec_t[t][i][j], exceeded[t][i]])
                         self.formula.append([-ord_dec[t][j], -exceeded[t][i], ord_dec_t[t][i][j]])
 
         for t in range(2, steps):
             for i in range(1, n+1):
                 if t > 1:
-                    # limit_aux = self.pool.id(f"at_limit_{t}_{i}")
-                    # self.formula.append([self.counters[t-1][i][d], -self.counters[t][i][d], limit_aux])
-                    # self.formula.append([-limit_aux, -self.counters[t-1][i][d]])
-                    # self.formula.append([-limit_aux, self.counters[t][i][d]])
-                    vars = []
                     for j in range(2, n+1):
                         if i != j:
                             ok_aux = self.pool.id(f"is_ok_{t}_{j}_{i}")
@@ -215,15 +210,32 @@ class TwinWidthEncoding2:
                             self.formula.append([-self.counters[t-1][i][d], -ok_aux])
                             self.formula.append([ord_dec_t[t][j][i], -ok_aux])
                             self.formula.append([self.counters[t][i][d], -ok_aux])
-                            vars.append(ok_aux)
 
-                    if i > 1:
-                        self.formula.append([-exceeded[t - 1][i], *[self.pool.id(f"is_ok_{t}_{i}_{j}") for j in range(1, n+1) if i != j], exceeded[t][j]])
+                    if i > 1 and t < steps - 1:
+                        self.formula.append([-exceeded[t][i], *[self.pool.id(f"is_ok_{t}_{i}_{j}") for j in range(1, n+1) if i != j], exceeded[t+1][i]])
 
                     for j in range(i+1, n+1):
-                        # self.formula.append([-self.ord[t][i], -exceeded[t][j], *[self.pool.id(f"at_limit_{t}_{x}") for
-                        #                                                          x in range(1, n+1) if x != j]])
                         self.formula.append([-self.ord[t][i], -exceeded[t][j]])
+
+    def sb_ord2(self, n, d, g, steps):
+        reasons = [[{} for _ in range(0, n + 1)] for _ in range(0, n + 1)]
+        for i in range(1, n+1):
+            for j in range(i+1, n+1):
+                self.formula.append([-self.red[1][i][j], reasons[1][i][j]])
+                self.formula.append([-reasons[1][i][j], self.red[1][i][j]])
+
+                for t in range(2, steps):
+                    for t2 in range(1, steps):
+                        self.formula.append([-reasons[t2][i][j], -self.ord[t][j], self.pool.id(f"r_m_{t}_{t2}_{i}")])
+                        self.formula.append([-reasons[t2][i][j], -self.ord[t][i], self.pool.id(f"r_m_{t}_{t2}_{j}")])
+                        self.formula.append([self.ord[t][i], self.ord[t][j], -self.pool.id(f"r_m_{t}_{t2}_{j}")])
+                        self.formula.append([reasons[t2][i][j], -self.ord[t][i], -self.pool.id(f"r_m_{t}_{t2}_{j}")])
+                        self.formula.append([reasons[t2][i][j], -self.ord[t][j], -self.pool.id(f"r_m_{t}_{t2}_{i}")])
+
+                        self.formula.append([self.red[t-1][i][j], -self.red[t][i][j], reasons[t][i][j]])
+                        self.formula.append([-self.merged_edge[t][j], -self.merge[t][i],
+                                             self.red[t-1][i][j], -self.pool.id(f"r_m_{t}_{t2}_{i}")
+                                             -reasons[t2][i][j]])
 
     def encode_sb_static(self, n, d, g, steps):
         for n1 in range(1, n+1):
@@ -490,8 +502,20 @@ class TwinWidthEncoding2:
             self.encode_sb_static(n, d, g, steps)
 
         if self.is_grid:
-            self.formula.append([self.ord[1][1]])
-            self.formula.append([self.merge[1][2], self.merge[1][5], self.merge[1][6]])
+            clause = []
+            dimension1 = max(x for x, y in self.node_map.keys()) + 1
+            dimension2 = max(y for x, y in self.node_map.keys()) + 1
+
+            for x1 in range(0, dimension1 // 2 + dimension1 % 2):
+                for x2 in range(0, dimension2 // 2 + dimension2 % 2):
+                    x1_coord = [x1, dimension1 - 1 - x1]
+                    x2_coord = [x2, dimension2 - 1 - x2]
+
+                    coords = [(x1_coord[0], x2_coord[0]), (x1_coord[1], x2_coord[0]),
+                              (x1_coord[0], x2_coord[1]), (x1_coord[1], x2_coord[0])]
+                    clause.append(self.ord[1][min(self.node_map[x] for x in coords)])
+
+            self.formula.append(clause)
 
         return self.formula
 
@@ -568,7 +592,7 @@ class TwinWidthEncoding2:
                     steps = min(len(g.nodes) - i - 1, steps_limit)
 
                 formula = self.encode(g, i, i_od, i_mg, steps)
-                # formula.to_file("test.cnf")
+                formula.to_file("test.cnf")
                 # if os.path.exists("symmetries.txt"):
                 #     with open("symmetries.txt") as syminp:
                 #         for cl in syminp:
@@ -656,9 +680,16 @@ class TwinWidthEncoding2:
 
         c_max = 0
         step = 1
-        for n in od:
+        watches = set()
+        decreases = [[]]
+        red_counts = [[]]
+
+        for i, n in enumerate(od):
             if verbose:
                 print(f"{n} => {mg[n]}")
+
+            red_counts.append({})
+            decreases.append(set())
 
             t = unmap[mg[n]]
             n = unmap[n]
@@ -669,6 +700,9 @@ class TwinWidthEncoding2:
 
             for v in nn:
                 if v != t:
+                    if g[n][v]['red'] and v in tn and g[t][v]['red']:
+                        decreases[-1].add(v)
+
                     # Red remains, should edge exist
                     if v in tn and g[n][v]['red']:
                         g[t][v]['red'] = True
@@ -688,8 +722,12 @@ class TwinWidthEncoding2:
                         cc += 1
                         u2, v2 = self.node_map[u], self.node_map[v]
                         u2, v2 = min(u2, v2), max(u2, v2)
+
                         if not model[self.red[step][u2][v2]]:
                             print(f"Missing red edge in step {step}")
+                red_counts[-1][u] = cc
+                if step > 1 and red_counts[-2][u] < red_counts[-1][u]:
+                    decreases[-1].add(u)
 
                 if cc > d:
                     climit = 0
@@ -698,6 +736,17 @@ class TwinWidthEncoding2:
                             climit = x
                     print(f"Exceeded bound in step {step}, node {u}, {cc}/{climit}")
                 c_max = max(c_max, cc)
+
+            for cn in g.nodes:
+                if red_counts[-1][cn] == d and (step == 1 or red_counts[-2][cn] != d):
+                    for ci, cd in enumerate(decreases):
+                        if cn in cd:
+                            cdel = [cw for cw in watches if cw[0] <= ci]
+                            for cde in cdel:
+                                watches.discard(cde)
+
+            if any(od[i] < x[1] for x in watches):
+                print("SB Violation")
             #
             # for i in range(1, len(g.nodes) + 1):
             #     for j in range(i+1, len(g.nodes) + 1):
@@ -707,4 +756,8 @@ class TwinWidthEncoding2:
             #                 print(f"Excess red edge {u2} {v2}")
 
             step += 1
+
+            if od[i] > i+1:
+                watches.add((i, od[i]))
+
         return c_max, od, mg
