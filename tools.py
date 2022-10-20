@@ -642,3 +642,23 @@ def encode_cards_exact_tot(pool, lits, bound, name):
         form.append([-cvars[bound]])
 
     return form, cvars[:bound+1]
+
+
+def amo_seq(lits, name, pool):
+    vars = [lits[0]]
+    vars.extend(pool.id(f"{name}_{i}") for i in range(1, len(lits)))
+    clauses = []
+
+    for i in range(1, len(lits)):
+        clauses.append([-vars[i - 1], -lits[i]])
+        clauses.append([-lits[i], vars[i]])
+        clauses.append([-vars[i - 1], vars[i]])
+
+    # clauses.append([-lits[0], vars[1]])
+    # for i in range(1, len(lits)-1):
+    #     clauses.append([-vars[i], -lits[i]])
+    #     clauses.append([-lits[i], vars[i+1]])
+    #     clauses.append([-vars[i], vars[i+1]])
+    # clauses.append([-vars[-1], -lits[-1]])
+
+    return clauses, vars
