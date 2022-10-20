@@ -120,15 +120,8 @@ class TwinWidthEncoding2:
                 for i in range(1, n+1):
                     # Do not merge with yourself
                     self.formula.append([-self.ord_vars[i][t], -self.merge[t][i]])
-                    # self.formula.append([-self.ord[t][i], -self.merge[t][i]])
-                    # # Do not merge with merged nodes
-                    # for t2 in range(1, t):
-                    #     self.formula.append([-self.ord[t2][i], -self.merge[t][i]])
-
-                    for j in range(i+1, n+1):  # Lex Merge order
-                        self.formula.append([-self.ord[t][j], -self.merge[t][i]])
-                    for j in range(1, i):
-                        self.formula.append([-self.ord[t][i], -self.merge[t][j]])
+                    # Lex ordering
+                    self.formula.append([-self.merge[t][i], *[self.ord[t][j] for j in range(1, i)]])
 
         if self.cubic > 0:
             for t in range(2, steps):

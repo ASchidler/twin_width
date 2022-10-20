@@ -117,24 +117,16 @@ class TwinWidthEncoding2:
                 # Do not merge with yourself
                 self.formula.append([-self.ord_vars[i][t], -self.merge[t][i]])
 
-                # self.formula.append([-self.ord[t][i], -self.merge[t][i]])
-                # # Do not merge with merged nodes
-                # for t2 in range(1, t):
-                #     self.formula.append([-self.ord[t2][i], -self.merge[t][i]])
+                # Lex ordering
+                self.formula.append([-self.merge[t][i], *[self.ord[t][j] for j in range(1, i)]])
 
-                for j in range(i+1, n+1):  # Lex Merge order
-                    self.formula.append([-self.ord[t][j], -self.merge[t][i]])
-                for j in range(1, i):
-                    self.formula.append([-self.ord[t][i], -self.merge[t][j]])
-
-        if self.cubic > 0:
-            for t in range(2, steps):
+            if t > 1:
                 for i in range(1, n + 1):
                     for k in range(1, n+1):
                         if k == i:
                             continue
                         self.formula.append([-self.ord[t][i], -self.tred(t-1, i, k), self.merged_edge[t][k]])
-                        self.formula.append([-self.ord[t][i], self.tred(t - 1, i, k), -self.merged_edge[t][k]])
+                        self.formula.append([-self.ord[t][i], self.tred(t-1, i, k), -self.merged_edge[t][k]])
 
     def encode_sb_order(self, n, d, steps, max_diff=sys.maxsize):
         """Enforce lex ordering whenever there is no node that reaches the bound at time t"""
@@ -338,23 +330,13 @@ class TwinWidthEncoding2:
                     # Create new edges
                     diff = differences[(i, j)]
                     for k in diff:
-                        if self.cubic == 0:
-                            start = [-self.ord[t][i], -self.merge[i][j], self.tred(t, j, k)]
-                        else:
-                            start = [-self.ord[t][i], -self.merge[t][j], self.tred(t, j, k), *[self.ord[t2][k] for t2 in range(1, t)]]
-                            # if t > 1:
-                            #     start = [-self.ord[t][i], self.ord_vars[k][t-1], -self.merge[t][j], self.tred(t, j, k)]
-                            # else:
-                            #     start = [-self.ord[t][i], -self.merge[t][j], self.tred(t, j, k)]
+                        start = [-self.ord[t][i], -self.merge[t][j], self.tred(t, j, k), *[self.ord[t2][k] for t2 in range(1, t)]]
+                        # if t > 1:
+                        #     start = [-self.ord[t][i], self.ord_vars[k][t-1], -self.merge[t][j], self.tred(t, j, k)]
+                        # else:
+                        #     start = [-self.ord[t][i], -self.merge[t][j], self.tred(t, j, k)]
 
                         self.formula.append(start)
-
-                    # Transfer from merge source to merge target
-                    if self.cubic == 0 and t > 1:
-                        for k in range(1, n + 1):
-                            if i == k or j == k:
-                                continue
-                            self.formula.append([-self.ord[t][i], -self.merge[i][j], -self.tred(t-1, i, k), self.tred(t, j, k)])
 
                     # Make sure every red edge is created for a reason
                     clause1 = [-self.tred(t, i, j), -self.merge[t][i]]
@@ -385,8 +367,8 @@ class TwinWidthEncoding2:
                             continue
                         if i < j:
                             self.formula.append([self.ord[t][i], self.ord[t][j], -self.tred(t - 1, i, j), self.tred(t, i, j)])
-                        if self.cubic == 2:
-                            self.formula.append([-self.merge[t][i], -self.merged_edge[t][j], self.tred(t, i, j)])
+
+                        self.formula.append([-self.merge[t][i], -self.merged_edge[t][j], self.tred(t, i, j)])
 
     def encode_vertex_counters(self, n, d, steps):
         # Counting
