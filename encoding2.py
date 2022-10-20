@@ -29,6 +29,7 @@ class TwinWidthEncoding2:
         self.static_card = None
         self.sb_static_diff = sb_static_diff
         self.is_grid = is_grid
+        self.ord_vars = None
 
     def remap_graph(self, g):
         self.node_map = {}
@@ -51,6 +52,7 @@ class TwinWidthEncoding2:
         self.red = [[{} for _ in range(0, len(g.nodes) + 1)] for _ in range(0, len(g.nodes) + 1)]
         self.ord = [{} for _ in range(0, len(g.nodes) + 1)]
         self.merge = [{} for _ in range(0, len(g.nodes) + 1)]
+        self.ord_vars = [{} for _ in range(0, len(g.nodes) + 1)]
         self.cardvars = [[] for _ in range(0, len(g.nodes) + 1)]
         self.static_card = [{} for _ in range(0, len(g.nodes) + 1)]
 
@@ -87,8 +89,14 @@ class TwinWidthEncoding2:
 
         # Make sure each node is assigned only once...
         for i in range(1, n + 1):
-            self.formula.extend(
-                CardEnc.atmost([self.ord[t][i] for t in range(1, steps)], bound=1, vpool=self.pool))
+            self.ord_vars[i] = [None]
+            clauses, ovs = tools.amo_seq([self.ord[t][i] for t in range(1, steps)], f"ord_amo_{i}", self.pool)
+            self.ord_vars[i].extend(ovs)
+            self.formula.extend(clauses)
+
+            # Make implication an equivalence, causes speedup
+            for t in range(1, steps):
+                self.formula.append([*[self.ord[t2][i] for t2 in range(1, t + 1)], -self.ord_vars[i][t]])
 
     def encode_merge(self, n, steps):
         if self.cubic < 2:
@@ -111,10 +119,11 @@ class TwinWidthEncoding2:
 
                 for i in range(1, n+1):
                     # Do not merge with yourself
-                    self.formula.append([-self.ord[t][i], -self.merge[t][i]])
-                    # Do not merge with merged nodes
-                    for t2 in range(1, t):
-                        self.formula.append([-self.ord[t2][i], -self.merge[t][i]])
+                    self.formula.append([-self.ord_vars[i][t], -self.merge[t][i]])
+                    # self.formula.append([-self.ord[t][i], -self.merge[t][i]])
+                    # # Do not merge with merged nodes
+                    # for t2 in range(1, t):
+                    #     self.formula.append([-self.ord[t2][i], -self.merge[t][i]])
 
                     for j in range(i+1, n+1):  # Lex Merge order
                         self.formula.append([-self.ord[t][j], -self.merge[t][i]])
@@ -467,7 +476,7 @@ class TwinWidthEncoding2:
                     steps = min(len(g.nodes) - i - 1, steps_limit)
 
                 formula = self.encode(g, i, i_od, i_mg, steps)
-
+                formula.to_file("test2.cnf")
                 slv.append_formula(formula)
 
                 if verbose:

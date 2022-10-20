@@ -158,6 +158,9 @@ class TwinWidthEncoding:
 
         if verbose:
             print(f"Created encoding in {time.time() - start}")
+        for cv in self.get_card_vars(start_bound):
+            formula.append([cv])
+        formula.to_file("test.cnf")
         od = None
         mg = None
         with solver() as slv:
