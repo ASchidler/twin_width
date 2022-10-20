@@ -11,7 +11,7 @@ import encoding3
 # g, steps_limit = grid_2d_graph(7, 7), 35
 g, steps_limit = grid_2d_graph(9, 6), 44 # 46 (43)
 # g, steps_limit = grid_2d_graph(8, 6), 50
-    
+
 print(len(g.nodes))
 
 # enc = encoding.TwinWidthEncoding(use_sb_static=False, use_sb_static_full=False)

@@ -398,6 +398,9 @@ class TwinWidthEncoding2:
                     if i != j:
                         self.formula.append([-self.merge[t][j], -self.tred(t, i, j), self.pool.id(f"red_count_{t}_{i}")])
 
+        if d == 0:
+            return
+
         # Next, use the cardinality constraint for counting
         for t in range(1, steps - 1):
             for i in range(1, n + 1):
@@ -570,7 +573,10 @@ class TwinWidthEncoding2:
                             overall_clause.append(aux)
 
                         self.formula.append(overall_clause)
-    def run(self, g, solver, start_bound, verbose=True, check=True, lb = 0, timeout=0, i_od=None, i_mg=None, steps_limit=None):
+    def run(self, g, solver, start_bound, verbose=True, check=True, lb = 0, timeout=0, i_od=None, i_mg=None, steps_limit=None, write=False):
+        if len(g.nodes) < 4:
+            return 0, None, None
+
         start = time.time()
         cb = start_bound
         od = None
@@ -599,8 +605,14 @@ class TwinWidthEncoding2:
                 else:
                     steps = min(len(g.nodes) - i - 1, steps_limit)
 
+                if steps <= 1:
+                    cb = i
+                    i = cb - 1
+                    continue
+
                 formula = self.encode(g, i, i_od, i_mg, steps)
-                formula.to_file("test3.cnf")
+                if write:
+                    formula.to_file("test3.cnf")
                 # if os.path.exists("symmetries.txt"):
                 #     with open("symmetries.txt") as syminp:
                 #         for cl in syminp:

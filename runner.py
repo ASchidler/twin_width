@@ -9,6 +9,7 @@ import pysat.solvers as slv
 
 import encoding as encoding
 import encoding2 as encoding2
+import encoding3
 import encoding_lazy2 as lazy2
 
 import encoding_signed_bipartite
@@ -25,8 +26,8 @@ import argparse as argp
 
 ap = argp.ArgumentParser(description="Python implementation for computing and improving decision trees.")
 ap.add_argument("instance", type=str)
-ap.add_argument("-e", dest="encoding", action="store", default=0, choices=[0, 1, 2], type=int,
-                help="The encoding to use (0=Relative, 1=Absolute, 2=Absolute Incremental")
+ap.add_argument("-e", dest="encoding", action="store", default=0, choices=[0, 1, 2, 3], type=int,
+                help="The encoding to use (0=Relative, 1=Absolute, 2=Absolute Incremental, 3=Absolute with cardinality trick")
 ap.add_argument("-c", dest="cubic", action="store_true", default=False,
                 help="Cubic mode, reduces the number of clauses from n^4 to n^3 (only available for absolute encodings)"
                 )
@@ -68,16 +69,13 @@ if instance.endswith(".cnf"):
 
     start = time.time()
 
-    if len(sys.argv) > 2 and not output_graphs:
+    if len(sys.argv) > 2 and not args.draw:
         cb = treewidth.solve(g.to_undirected(), len(g.nodes) - 1, slv.Glucose3, True)[1]
     else:
         enc = encoding_signed_bipartite.TwinWidthEncoding()
         cb = enc.run(g, slv.Cadical, ub)
 else:
     g = parser.parse(args.instance)[0]
-    # g = tools.prime_paley(29)
-    # g = grid_2d_graph(6, 6)
-    # g = tools.prime_square_paley(9)
 
     print(f"{len(g.nodes)} {len(g.edges)}")
     preprocessing.twin_merge(g)
@@ -98,12 +96,17 @@ else:
     elif args.encoding == 1:
         enc = encoding2.TwinWidthEncoding2(g, sb_ord=args.order, sb_static=0 if not args.contraction else args.contraction_limit, sb_static_full=args.contraction_full,
                                            cubic=2 if args.cubic else 0, sb_static_diff=args.contraction_diff)
-    else:        
-        enc = lazy2.TwinWidthEncoding2(g, sb_ord=args.order, sb_static=0 if not args.contraction else args.contraction_limit, use_sb_static_full=args.contraction_full)
+    elif args.encoding == 2:
+        enc = lazy2.TwinWidthEncoding2(g, sb_ord=args.order, sb_static=0 if not args.contraction else args.contraction_limit)
+    else:
+        enc = encoding3.TwinWidthEncoding2(g, sb_ord=args.order,
+                                           sb_static=0 if not args.contraction else args.contraction_limit,
+                                           sb_static_full=args.contraction_full,
+                                           cubic=2, sb_static_diff=args.contraction_diff)
     # enc = lazy.TwinWidthEncoding()
     # enc = encoding2.TwinWidthEncoding2(g, cubic=2)
     # enc = lazy2.TwinWidthEncoding2(g, cubic=False)
-    cb = enc.run(g, slv.Cadical, ub, verbose=args.verbose)
+    cb = enc.run(g, slv.Cadical, ub-2, verbose=args.verbose)
 
 print(f"Finished")
 print(f"{cb}")

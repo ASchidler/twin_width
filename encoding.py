@@ -151,16 +151,18 @@ class TwinWidthEncoding:
 
         return formula
 
-    def run(self, g, solver, start_bound, verbose=True, check=True, lb=0, i_od=None, i_mg=None, steps_limit=None):
+    def run(self, g, solver, start_bound, verbose=True, check=True, lb=0, i_od=None, i_mg=None, steps_limit=None, write=False):
         start = time.time()
         formula = self.encode(g, start_bound, i_od, i_mg)
         cb = start_bound
 
         if verbose:
             print(f"Created encoding in {time.time() - start}")
-        for cv in self.get_card_vars(start_bound):
-            formula.append([cv])
-        formula.to_file("test.cnf")
+
+        if write:
+            for cv in self.get_card_vars(start_bound):
+                formula.append([cv])
+            formula.to_file("test.cnf")
         od = None
         mg = None
         with solver() as slv:

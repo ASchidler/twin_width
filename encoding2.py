@@ -446,7 +446,7 @@ class TwinWidthEncoding2:
                             overall_clause.append(aux)
 
                         self.formula.append(overall_clause)
-    def run(self, g, solver, start_bound, verbose=True, check=True, lb = 0, timeout=0, i_od=None, i_mg=None, steps_limit=None):
+    def run(self, g, solver, start_bound, verbose=True, check=True, lb = 0, timeout=0, i_od=None, i_mg=None, steps_limit=None, write=False):
         start = time.time()
         cb = start_bound
         od = None
@@ -476,7 +476,8 @@ class TwinWidthEncoding2:
                     steps = min(len(g.nodes) - i - 1, steps_limit)
 
                 formula = self.encode(g, i, i_od, i_mg, steps)
-                formula.to_file("test2.cnf")
+                if write:
+                    formula.to_file("test2.cnf")
                 slv.append_formula(formula)
 
                 if verbose:

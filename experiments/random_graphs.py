@@ -18,13 +18,16 @@ g_max_size = 20
 
 results = {}
 
-pool_size = 2
+pool_size = 1
 
 tenc = int(sys.argv[1])
 
 def compute_graph(args):
     c_p, c_g_size = args
     g = gnp_random_graph(c_g_size, c_p)
+    for cl in nx.generate_edgelist(g):
+        print(cl)
+
     components = list(nx.connected_components(g))
     tww = 0
     start = time.time()
@@ -41,7 +44,7 @@ def compute_graph(args):
         else:
             enc = encoding3.TwinWidthEncoding2(g, cubic=2, sb_ord=False, sb_static=0, sb_static_full=True, sb_static_diff=False)
         # enc = encoding_lazy2.TwinWidthEncoding2(g, cubic=True, sb_ord=True)
-        result = enc.run(cg, Cadical, heuristic.get_ub(cg), check=False, verbose=False)
+        result = enc.run(cg, Cadical, heuristic.get_ub(cg), check=False, verbose=True)
         if isinstance(result, int):
             tww = max(tww, result)
         else:

@@ -645,6 +645,9 @@ def encode_cards_exact_tot(pool, lits, bound, name):
 
 
 def amo_seq(lits, name, pool):
+    if len(lits) == 0:
+        return
+
     vars = [lits[0]]
     vars.extend(pool.id(f"{name}_{i}") for i in range(1, len(lits)))
     clauses = []
