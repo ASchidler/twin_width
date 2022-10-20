@@ -225,7 +225,6 @@ class TwinWidthEncoding2:
         for t in range(3, steps):
             for i in range(1, n + 1):
                 ord_dec[t][i] = self.pool.id(f"ord_dec_{t}_{i}")
-                auxes = []
 
                 for cd in range(1, d+1):
                     aux = self.pool.id(f"ord_dec_{t}_{i}_{cd}")
@@ -237,10 +236,10 @@ class TwinWidthEncoding2:
                     self.formula.append([-self.counters[t - 2][i][cd], self.counters[t-1][i][cd], aux])
                     self.formula.append([-aux, self.counters[t-2][i][cd]])
                     self.formula.append([-aux, -self.counters[t-1][i][cd]])
-                    auxes.append(aux)
+                    self.formula.append([-ord_dec[t][i], -self.merge[t][i], -self.counters[t-2][i][cd], -self.counters[t-1][i][cd]])
 
                 self.formula.append([-ord_dec[t][i], self.counters[t][i][d]])
-                self.formula.append([-ord_dec[t][i], -self.merge[t][i], *auxes])
+                self.formula.append([-ord_dec[t][i], self.counters[t-2][i][1]])
                 self.formula.append([-ord_dec[t][i], self.merge[t][i], self.counters[t - 2][i][d]])
                 self.formula.append([-ord_dec[t][i], self.merge[t][i], -self.counters[t - 1][i][d]])
 
