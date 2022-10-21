@@ -32,6 +32,7 @@ class TwinWidthEncoding2:
         self.static_card = None
         self.sb_static_diff = sb_static_diff
         self.is_grid = is_grid
+        self.real_merge = None
 
     def remap_graph(self, g):
         self.node_map = {}
@@ -54,19 +55,18 @@ class TwinWidthEncoding2:
         self.red = [[{} for _ in range(0, len(g.nodes) + 1)] for _ in range(0, len(g.nodes) + 1)]
         self.ord = [{} for _ in range(0, len(g.nodes) + 1)]
         self.merge = [{} for _ in range(0, len(g.nodes) + 1)]
+        self.real_merge = [{} for _ in range(0, len(g.nodes) + 1)]
         self.cardvars = [[] for _ in range(0, len(g.nodes) + 1)]
         self.static_card = [[{} for _ in range(0, len(g.nodes) + 1)] for _ in range(0, len(g.nodes) + 1)]
         self.counters = [[{} for _ in range(0, len(g.nodes) + 1)] for _ in range(0, len(g.nodes) + 1)]
         self.ord_vars = [{} for _ in range(0, len(g.nodes) + 1)]
 
-        if self.cubic < 2:
-            for i in range(1, len(g.nodes)+1):
-                for j in range(i+1, len(g.nodes)+1):
-                    self.merge[i][j] = self.pool.id(f"merge{i}_{j}")
-        else:
-            for t in range(1, steps):
-                for j in range(1, len(g.nodes)+1):
-                    self.merge[t][j] = self.pool.id(f"merge{t}_{j}")
+        for t in range(1, steps):
+            for j in range(1, len(g.nodes)+1):
+                self.merge[t][j] = self.pool.id(f"merge{t}_{j}")
+        for i in range(1, len(g.nodes) + 1):
+            for j in range(i + 1, len(g.nodes) + 1):
+                self.real_merge[i][j] = self.pool.id(f"real_merge{i}_{j}")
 
         if self.cubic > 0:
             self.merged_edge = [{} for _ in range(0, len(g.nodes) + 1)]
@@ -120,6 +120,9 @@ class TwinWidthEncoding2:
                 # Lex ordering
                 self.formula.append([-self.merge[t][i], *[self.ord[t][j] for j in range(1, i)]])
 
+                for j in range(i+1, n+1):
+                    self.formula.append([-self.ord[t][i], -self.merge[t][j], self.real_merge[i][j]])
+
             if t > 1:
                 for i in range(1, n + 1):
                     for k in range(1, n+1):
@@ -127,6 +130,9 @@ class TwinWidthEncoding2:
                             continue
                         self.formula.append([-self.ord[t][i], -self.tred(t-1, i, k), self.merged_edge[t][k]])
                         self.formula.append([-self.ord[t][i], self.tred(t-1, i, k), -self.merged_edge[t][k]])
+
+        for i in range(1, n):
+            self.formula.extend(CardEnc.atmost([self.real_merge[i][j] for j in range(i + 1, n + 1)], vpool=self.pool))
 
     def encode_sb_order(self, n, d, steps, max_diff=sys.maxsize):
         """Enforce lex ordering whenever there is no node that reaches the bound at time t"""
@@ -330,13 +336,14 @@ class TwinWidthEncoding2:
                     # Create new edges
                     diff = differences[(i, j)]
                     for k in diff:
-                        start = [-self.ord[t][i], -self.merge[t][j], self.tred(t, j, k), *[self.ord[t2][k] for t2 in range(1, t)]]
-                        # if t > 1:
-                        #     start = [-self.ord[t][i], self.ord_vars[k][t-1], -self.merge[t][j], self.tred(t, j, k)]
-                        # else:
-                        #     start = [-self.ord[t][i], -self.merge[t][j], self.tred(t, j, k)]
+                        # start = [-self.ord[t][i], -self.real_merge[i][j], self.tred(t, j, k), *[self.ord[t2][k] for t2 in range(1, t)]]
+                        if t > 1:
+                            start = [-self.ord_vars[i][t], self.ord_vars[j][t], self.ord_vars[k][t], -self.real_merge[i][j], self.tred(t, j, k)]
+                        else:
+                            start = [-self.ord[t][i], -self.real_merge[i][j], self.tred(t, j, k)]
 
                         self.formula.append(start)
+
 
                     # Make sure every red edge is created for a reason
                     clause1 = [-self.tred(t, i, j), -self.merge[t][i]]
@@ -366,7 +373,9 @@ class TwinWidthEncoding2:
                         if i == j:
                             continue
                         if i < j:
-                            self.formula.append([self.ord[t][i], self.ord[t][j], -self.tred(t - 1, i, j), self.tred(t, i, j)])
+                            # self.formula.append([self.ord_vars[i][t], self.ord_vars[j][t], -self.tred(t - 1, i, j), self.tred(t, i, j)])
+                            self.formula.append(
+                                [self.ord[t][i], self.ord[t][j], -self.tred(t - 1, i, j), self.tred(t, i, j)])
 
                         self.formula.append([-self.merge[t][i], -self.merged_edge[t][j], self.tred(t, i, j)])
 

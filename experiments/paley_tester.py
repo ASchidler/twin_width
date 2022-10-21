@@ -18,15 +18,12 @@ ub2 = heuristic.get_ub2(g)
 ub = min(ub, ub2)
 print(len(g.nodes))
 
-ub = 36
+ub = 35
 
-enc = encoding.TwinWidthEncoding(use_sb_static=False, use_sb_static_full=False)
-# enc = encoding2.TwinWidthEncoding2(g, cubic=2, sb_ord=False, sb_static=0, sb_static_full=False, is_grid=False)
-
-result = enc.run(g, solver=slv.Cadical, start_bound=ub)
-
+# enc = encoding.TwinWidthEncoding(use_sb_static=False, use_sb_static_full=False)
+enc = encoding2.TwinWidthEncoding2(g, cubic=2, sb_ord=False, sb_static=0, sb_static_full=False, is_grid=False)
 # enc = encoding3.TwinWidthEncoding2(g, cubic=2, sb_static=0, sb_ord=False, sb_static_full=True, sb_static_diff=False)
-# result = enc.run(g, slv.Cadical, ub)
+result = enc.run(g, slv.Cadical, ub, write=True)
 
 print(f"Result: {result[0]}")
 

@@ -30,6 +30,7 @@ class TwinWidthEncoding2:
         self.sb_static_diff = sb_static_diff
         self.is_grid = is_grid
         self.ord_vars = None
+        self.real_merge = None
 
     def remap_graph(self, g):
         self.node_map = {}
@@ -55,6 +56,7 @@ class TwinWidthEncoding2:
         self.ord_vars = [{} for _ in range(0, len(g.nodes) + 1)]
         self.cardvars = [[] for _ in range(0, len(g.nodes) + 1)]
         self.static_card = [{} for _ in range(0, len(g.nodes) + 1)]
+        self.real_merge = [{} for _ in range(0, len(g.nodes) + 1)]
 
         if self.cubic < 2:
             for i in range(1, len(g.nodes)+1):
@@ -64,6 +66,10 @@ class TwinWidthEncoding2:
             for t in range(1, steps):
                 for j in range(1, len(g.nodes)+1):
                     self.merge[t][j] = self.pool.id(f"merge{t}_{j}")
+
+            for i in range(1, len(g.nodes)+1):
+                for j in range(i+1, len(g.nodes)+1):
+                    self.real_merge[i][j] = self.pool.id(f"rmerge{i}_{j}")
 
         if self.cubic > 0:
             self.merged_edge = [{} for _ in range(0, len(g.nodes) + 1)]
@@ -123,6 +129,9 @@ class TwinWidthEncoding2:
                     # Lex ordering
                     self.formula.append([-self.merge[t][i], *[self.ord[t][j] for j in range(1, i)]])
 
+                    for j in range(i + 1, n + 1):
+                        self.formula.append([-self.ord[t][i], -self.merge[t][j], self.real_merge[i][j]])
+
         if self.cubic > 0:
             for t in range(2, steps):
                 for i in range(1, n + 1):
@@ -130,6 +139,9 @@ class TwinWidthEncoding2:
                         if k == i:
                             continue
                         self.formula.append([-self.ord[t][i], -self.tred(t-1, i, k), self.merged_edge[t][k]])
+
+            for i in range(1, n):
+                self.formula.extend(CardEnc.atmost([self.real_merge[i][j] for j in range(i + 1, n + 1)], vpool=self.pool))
 
     def encode_sb_order(self, n, d, steps, max_diff=sys.maxsize):
         """Enforce lex ordering whenever there is no node that reaches the bound at time t"""
@@ -286,10 +298,16 @@ class TwinWidthEncoding2:
                     for k in diff:
                         if self.cubic == 0:
                             start = [-self.ord[t][i], -self.merge[i][j], self.tred(t, j, k)]
+                            for t2 in range(1, t):
+                                start.append(self.ord[t2][k])
                         else:
-                            start = [-self.ord[t][i], -self.merge[t][j], self.tred(t, j, k)]
-                        for t2 in range(1, t):
-                            start.append(self.ord[t2][k])
+                            if t > 1:
+                                start = [-self.ord_vars[i][t], self.ord_vars[j][t], self.ord_vars[k][t],
+                                         -self.real_merge[i][j], self.tred(t, j, k)]                                
+                            else:
+                                start = [-self.ord[t][i], -self.real_merge[i][j], self.tred(t, j, k)]
+
+                            # start = [-self.ord[t][i], -self.merge[t][j], self.tred(t, j, k)]
                         self.formula.append(start)
 
                     # if self.sb_ord and i < j and self.cubic == 2:
@@ -321,6 +339,7 @@ class TwinWidthEncoding2:
                             continue
                         if i < j:
                             self.formula.append([self.ord[t][i], self.ord[t][j], -self.tred(t - 1, i, j), self.tred(t, i, j)])
+                        
                         if self.cubic == 2:
                             self.formula.append([-self.merge[t][i], -self.merged_edge[t][j], self.tred(t, i, j)])
 
@@ -467,6 +486,11 @@ class TwinWidthEncoding2:
                     steps = len(g.nodes) - i - 1
                 else:
                     steps = min(len(g.nodes) - i - 1, steps_limit)
+
+                if steps <= 1:
+                    cb = i
+                    i = cb - 1
+                    continue
 
                 formula = self.encode(g, i, i_od, i_mg, steps)
                 if write:
