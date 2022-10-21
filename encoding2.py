@@ -301,9 +301,10 @@ class TwinWidthEncoding2:
                             for t2 in range(1, t):
                                 start.append(self.ord[t2][k])
                         else:
+                            # start = [-self.ord[t][i], -self.real_merge[i][j], self.tred(t, j, k), *[self.ord[t2][k] for t2 in range(1, t)]]
                             if t > 1:
                                 start = [-self.ord_vars[i][t], self.ord_vars[j][t], self.ord_vars[k][t],
-                                         -self.real_merge[i][j], self.tred(t, j, k)]                                
+                                         -self.real_merge[i][j], self.tred(t, j, k)]
                             else:
                                 start = [-self.ord[t][i], -self.real_merge[i][j], self.tred(t, j, k)]
 
@@ -364,13 +365,13 @@ class TwinWidthEncoding2:
                     self.formula.extend(form)
                     self.cardvars[t].append(cvars)
                 else:
-                    # with ITotalizer(vars, ubound=d, top_id=self.pool.id(f"totalizer{t}_{i}")) as tot:
-                    #     self.formula.extend(tot.cnf)
-                    #     self.pool.occupy(self.pool.top - 1, tot.top_id)
-                    #     self.formula.append([-tot.rhs[d]])
-                    #     self.cardvars[t].append(list(tot.rhs))
+                    with ITotalizer(vars, ubound=d, top_id=self.pool.id(f"totalizer{t}_{i}")) as tot:
+                        self.formula.extend(tot.cnf)
+                        self.pool.occupy(self.pool.top - 1, tot.top_id)
+                        self.formula.append([-tot.rhs[d]])
+                        self.cardvars[t].append(list(tot.rhs))
 
-                    self.formula.extend(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
+                    # self.formula.extend(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
 
     def encode(self, g, d, od=None, mg=None, steps=None):
         if steps is None:
