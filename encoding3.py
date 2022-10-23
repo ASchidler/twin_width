@@ -149,13 +149,14 @@ class TwinWidthEncoding2:
                 clause = [-ord_dec[t][i]]
                 for cd in range(1, d+1):
                     aux_dec_s = self.pool.id(f"ord_dec_{t}_{i}_{cd}")
-                    self.formula.append([-self.counters[t-1][i][cd], self.counters[t][i][cd], aux_dec_s])
+                    self.formula.append([-self.counters[t - 1][i][cd], self.counters[t][i][cd], aux_dec_s])
                     self.formula.append([-aux_dec_s, self.counters[t-1][i][cd]])
                     self.formula.append([-aux_dec_s, -self.counters[t][i][cd]])
-                    self.formula.append([-aux_dec_s, ord_dec[t][i]])
+                    self.formula.append([-aux_dec_s, -self.ord_vars[i][t], ord_dec[t][i]])
                     clause.append(aux_dec_s)
                 self.formula.append(clause)
-        #
+                self.formula.append([-ord_dec[t][i], -self.ord_vars[i][t]])
+
         # for t in range(1, steps-2):
         #     decs = [self.pool.id(f"ord_dec_{t}_{i}") for i in range(1, n+1)]
         #     for i in range(t+1, n+1):
@@ -228,17 +229,23 @@ class TwinWidthEncoding2:
                 for cd in range(1, d+1):
                     aux = self.pool.id(f"ord_dec_{t}_{i}_{cd}")
                     if cd < d:
-                        self.formula.append([-self.merge[t][i], -self.counters[t-2][i][cd], self.counters[t-1][i][cd], -self.counters[t][i][d], ord_dec[t][i]])
+                        self.formula.append([-self.merge[t][i], -self.counters[t-2][i][cd], self.counters[t-1][i][cd], -self.counters[t][i][d], self.ord_vars[i][t], ord_dec[t][i]])
+                        # self.formula.append([-self.merge[t][i], -self.counters[t - 2][i][cd], self.counters[t - 1][i][cd], -self.counters[t][i][d], ord_dec[t][i]])
                     else:
-                        self.formula.append([-self.counters[t - 2][i][cd], self.counters[t - 1][i][cd], -self.counters[t][i][d], ord_dec[t][i]])
+                        self.formula.append([-self.counters[t - 2][i][cd], self.counters[t - 1][i][cd], -self.counters[t][i][d], self.ord_vars[i][t], ord_dec[t][i]])
+                        # self.formula.append([-self.counters[t - 2][i][cd], self.counters[t - 1][i][cd], -self.counters[t][i][d], ord_dec[t][i]])
 
-                    self.formula.append([-self.counters[t - 2][i][cd], self.counters[t-1][i][cd], aux])
+                    self.formula.append([-self.counters[t - 2][i][cd], self.counters[t-1][i][cd], self.ord_vars[i][t], aux])
+                    # self.formula.append([-self.counters[t - 2][i][cd], self.counters[t - 1][i][cd], aux])
                     self.formula.append([-aux, self.counters[t-2][i][cd]])
                     self.formula.append([-aux, -self.counters[t-1][i][cd]])
-                    self.formula.append([-ord_dec[t][i], -self.merge[t][i], -self.counters[t-2][i][cd], -self.counters[t-1][i][cd]])
+                    self.formula.append([-aux, -self.ord_vars[i][t]])
+                    self.formula.append([-ord_dec[t][i], -self.merge[t][i], -self.counters[t-2][i][cd], self.ord_vars[i][t], -self.counters[t-1][i][cd]])
+                    # self.formula.append([-ord_dec[t][i], -self.merge[t][i], -self.counters[t-2][i][cd], -self.counters[t-1][i][cd]])
 
                 self.formula.append([-ord_dec[t][i], self.counters[t][i][d]])
                 self.formula.append([-ord_dec[t][i], self.counters[t-2][i][1]])
+                self.formula.append([-ord_dec[t][i], -self.ord_vars[i][t]])
                 self.formula.append([-ord_dec[t][i], self.merge[t][i], self.counters[t - 2][i][d]])
                 self.formula.append([-ord_dec[t][i], self.merge[t][i], -self.counters[t - 1][i][d]])
 
