@@ -5,6 +5,7 @@ import time
 from threading import Timer
 
 import networkx
+import networkx as nx
 import pysat.solvers as slv
 
 import encoding as encoding
@@ -77,14 +78,13 @@ if instance.endswith(".cnf"):
 else:
     g = parser.parse(args.instance)[0]
 
-    print(f"{len(g.nodes)} {len(g.edges)}")
-    preprocessing.twin_merge(g)
-
     if len(g.nodes) == 1:
         print("Done, width: 0")
         exit(0)
 
     # TODO: Deal with disconnected?
+    print(f"{len(g.nodes)} {len(g.edges)}")
+    preprocessing.twin_merge(g)
     ub = heuristic.get_ub(g)
     ub2 = heuristic.get_ub2(g)
     print(f"UB {ub} {ub2}")
@@ -102,11 +102,9 @@ else:
         enc = encoding3.TwinWidthEncoding2(g, sb_ord=args.order,
                                            sb_static=0 if not args.contraction else args.contraction_limit,
                                            sb_static_full=args.contraction_full,
-                                           cubic=2, sb_static_diff=args.contraction_diff)
-    # enc = lazy.TwinWidthEncoding()
-    # enc = encoding2.TwinWidthEncoding2(g, cubic=2)
-    # enc = lazy2.TwinWidthEncoding2(g, cubic=False)
-    cb = enc.run(g, slv.Cadical, ub-2, verbose=args.verbose, write=True, steps_limit=40)
+                                           cubic=2, sb_static_diff=args.contraction_diff, break_g_symmetry=True)
+
+    cb = enc.run(g, slv.Cadical, ub, verbose=args.verbose, write=False)
 
 print(f"Finished")
 print(f"{cb}")

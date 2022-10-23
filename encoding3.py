@@ -11,7 +11,7 @@ import tools
 
 
 class TwinWidthEncoding2:
-    def __init__(self, g, card_enc=EncType.mtotalizer, cubic=0, sb_ord=False, twohop=False, sb_static=sys.maxsize, sb_static_full=False, sb_static_diff=False, is_grid=False):
+    def __init__(self, g, card_enc=EncType.mtotalizer, cubic=0, sb_ord=False, twohop=False, sb_static=sys.maxsize, sb_static_full=False, sb_static_diff=False, break_g_symmetry=False):
         self.ord = None
         self.merge = None
         self.merged_edge = None
@@ -31,13 +31,13 @@ class TwinWidthEncoding2:
         self.sb_static_full = sb_static_full
         self.static_card = None
         self.sb_static_diff = sb_static_diff
-        self.is_grid = is_grid
+        self.break_g_symmetry = break_g_symmetry
         self.real_merge = None
 
     def remap_graph(self, g):
         self.node_map = {}
+
         cnt = 1
-        gn = Graph()
 
         for u, v in sorted(g.edges()):
             if u not in self.node_map:
@@ -47,6 +47,8 @@ class TwinWidthEncoding2:
                 self.node_map[v] = cnt
                 cnt += 1
 
+        gn = Graph()
+        for u, v in g.edges():
             gn.add_edge(self.node_map[u], self.node_map[v])
 
         return gn
@@ -153,64 +155,64 @@ class TwinWidthEncoding2:
                     self.formula.append([-aux_dec_s, ord_dec[t][i]])
                     clause.append(aux_dec_s)
                 self.formula.append(clause)
-
-        for t in range(1, steps-2):
-            decs = [self.pool.id(f"ord_dec_{t}_{i}") for i in range(1, n+1)]
-            for i in range(t+1, n+1):
-                aux = self.pool.id(f"exceeded_{t}_{i}")
-                self.formula.append([-self.ord[t][i], aux, *decs])
-                if t > 1:
-                    self.formula.append([-self.pool.id(f"exceeded_{t-1}_{i}"), self.pool.id(f"exceeded_{t}_{i}"), *decs])
-
-            for i in range(1, n+1):
-                for j in range(n+1, 1):
-                    self.formula.append([-self.ord[t][i], -self.pool.id(f"exceeded_{t}_{j}")])
+        #
+        # for t in range(1, steps-2):
+        #     decs = [self.pool.id(f"ord_dec_{t}_{i}") for i in range(1, n+1)]
+        #     for i in range(t+1, n+1):
+        #         aux = self.pool.id(f"exceeded_{t}_{i}")
+        #         self.formula.append([-self.ord[t][i], aux, *decs])
+        #         if t > 1:
+        #             self.formula.append([-self.pool.id(f"exceeded_{t-1}_{i}"), self.pool.id(f"exceeded_{t}_{i}"), *decs])
+        #
+        #     for i in range(1, n+1):
+        #         for j in range(n+1, 1):
+        #             self.formula.append([-self.ord[t][i], -self.pool.id(f"exceeded_{t}_{j}")])
 
         # Full
-        # ord_dec_t = [[{} for _ in range(0, n+1)] for _ in range(0, n + 1)]
-        # exceeded = [{} for _ in range(0, n + 1)]
-        #
-        # for t in range(1, steps-1):
-        #     for i in range(t+1, n+1):
-        #         exceeded[t][i] = self.pool.id(f"exceeded_{t}_{i}")
-        #         self.formula.append([-self.ord[t][i], exceeded[t][i]])
-        #
-        # for t in range(2, steps):
-        #     for i in range(2, n+1):
-        #         exceeded[t][i] = self.pool.id(f"exceeded_{t}_{i}")
-        #         # self.formula.append([-exceeded[t][i], exceeded[t-1][i], self.ord[t][i]])
-        #
-        # for t in range(2, steps):
-        #     for i in range(2, n+1):
-        #         for j in range(1, n+1):
-        #             if i != j:
-        #                 ord_dec_t[t][i][j] = self.pool.id(f"ord_dec_t_{t}_{i}_{j}")
-        #
-        #                 if t == 2:
-        #                     self.formula.append([-ord_dec_t[t][i][j], ord_dec[t][j]])
-        #                 else:
-        #                     self.formula.append([-ord_dec_t[t][i][j], ord_dec[t][j], ord_dec_t[t-1][i][j]])
-        #                     self.formula.append([-ord_dec_t[t - 1][i][j], -exceeded[t][i], ord_dec_t[t][i][j]])
-        #
-        #                 self.formula.append([-ord_dec_t[t][i][j], exceeded[t][i]])
-        #                 self.formula.append([-ord_dec[t][j], -exceeded[t][i], ord_dec_t[t][i][j]])
-        #
-        # for t in range(2, steps):
-        #     for i in range(1, n+1):
-        #         if t > 1:
-        #             for j in range(2, n+1):
-        #                 if i != j:
-        #                     ok_aux = self.pool.id(f"is_ok_{t}_{j}_{i}")
-        #                     self.formula.append([self.counters[t-1][i][d], -self.counters[t][i][d],  -ord_dec_t[t][j][i], ok_aux])
-        #                     self.formula.append([-self.counters[t-1][i][d], -ok_aux])
-        #                     self.formula.append([ord_dec_t[t][j][i], -ok_aux])
-        #                     self.formula.append([self.counters[t][i][d], -ok_aux])
-        #
-        #             if i > 1 and t < steps - 1:
-        #                 self.formula.append([-exceeded[t][i], *[self.pool.id(f"is_ok_{t}_{i}_{j}") for j in range(1, n+1) if i != j], exceeded[t+1][i]])
-        #
-        #             for j in range(i+1, n+1):
-        #                 self.formula.append([-self.ord[t][i], -exceeded[t][j]])
+        ord_dec_t = [[{} for _ in range(0, n+1)] for _ in range(0, n + 1)]
+        exceeded = [{} for _ in range(0, n + 1)]
+
+        for t in range(1, steps-1):
+            for i in range(t+1, n+1):
+                exceeded[t][i] = self.pool.id(f"exceeded_{t}_{i}")
+                self.formula.append([-self.ord[t][i], exceeded[t][i]])
+
+        for t in range(2, steps):
+            for i in range(2, n+1):
+                exceeded[t][i] = self.pool.id(f"exceeded_{t}_{i}")
+                # self.formula.append([-exceeded[t][i], exceeded[t-1][i], self.ord[t][i]])
+
+        for t in range(2, steps):
+            for i in range(2, n+1):
+                for j in range(1, n+1):
+                    if i != j:
+                        ord_dec_t[t][i][j] = self.pool.id(f"ord_dec_t_{t}_{i}_{j}")
+
+                        if t == 2:
+                            self.formula.append([-ord_dec_t[t][i][j], ord_dec[t][j]])
+                        else:
+                            self.formula.append([-ord_dec_t[t][i][j], ord_dec[t][j], ord_dec_t[t-1][i][j]])
+                            self.formula.append([-ord_dec_t[t - 1][i][j], -exceeded[t][i], ord_dec_t[t][i][j]])
+
+                        self.formula.append([-ord_dec_t[t][i][j], exceeded[t][i]])
+                        self.formula.append([-ord_dec[t][j], -exceeded[t][i], ord_dec_t[t][i][j]])
+
+        for t in range(2, steps):
+            for i in range(1, n+1):
+                if t > 1:
+                    for j in range(2, n+1):
+                        if i != j:
+                            ok_aux = self.pool.id(f"is_ok_{t}_{j}_{i}")
+                            self.formula.append([self.counters[t-1][i][d], -self.counters[t][i][d],  -ord_dec_t[t][j][i], ok_aux])
+                            self.formula.append([-self.counters[t-1][i][d], -ok_aux])
+                            self.formula.append([ord_dec_t[t][j][i], -ok_aux])
+                            self.formula.append([self.counters[t][i][d], -ok_aux])
+
+                    if i > 1 and t < steps - 1:
+                        self.formula.append([-exceeded[t][i], *[self.pool.id(f"is_ok_{t}_{i}_{j}") for j in range(1, n+1) if i != j], exceeded[t+1][i]])
+
+                    for j in range(i+1, n+1):
+                        self.formula.append([-self.ord[t][i], -exceeded[t][j]])
 
     def sb_ord2(self, n, d, g, steps):
         """Enforce lex ordering whenever there is no node that reaches the bound at time t"""
@@ -496,30 +498,45 @@ class TwinWidthEncoding2:
         self.encode_red(n, g, steps, d)
         self.encode_vertex_counters(n, d, steps)
 
+        if self.break_g_symmetry:
+            import pynauty
+
+            gn = pynauty.Graph(len(g.nodes))
+            for cn in g.nodes:
+                gn.connect_vertex(cn - 1, [cb - 1 for cb in g.neighbors(cn)])
+            grp = pynauty.autgrp(gn)
+            orbits = grp[3]
+            seen = set()
+            clause = []
+            nodes = []
+            orbit_groups = [[] for _ in range(0, len(g.nodes))]
+
+            # The first eliminated vertex must be the smallest from each group
+            for cni, cn in enumerate(range(1, len(g.nodes)+1)):
+                orbit_groups[orbits[cni]].append(cn)
+                if orbits[cni] not in seen:
+                    clause.append(self.ord[1][cn])
+                    nodes.append(cn)
+                    seen.add(orbits[cni])
+            self.formula.append(clause)
+
+            # Enforce lex ordering in largest group
+            # This is not correct, but many instances are sat even with that
+            # og = max(orbit_groups, key=lambda x: len(x))
+            # for i, cn in enumerate(og):
+            #     for t in range(1, steps):
+            #         for cn2 in og[i+1:]:
+            #             self.formula.append([-self.ord_vars[cn2][t], self.ord_vars[cn][t]])
+
+
         if self.sb_ord:
-            # self.sb_ord2(n, d, g, steps)
-            self.encode_sb_order(n, d, steps)
+            self.sb_ord2(n, d, g, steps)
+            # self.encode_sb_order(n, d, steps)
         if self.twohop:
             self.sb_twohop(n, g, steps, True)
 
         if self.sb_static > 0:
             self.encode_sb_static(n, d, g, steps)
-
-        if self.is_grid:
-            clause = []
-            dimension1 = max(x for x, y in self.node_map.keys()) + 1
-            dimension2 = max(y for x, y in self.node_map.keys()) + 1
-
-            for x1 in range(0, dimension1 // 2 + dimension1 % 2):
-                for x2 in range(0, dimension2 // 2 + dimension2 % 2):
-                    x1_coord = [x1, dimension1 - 1 - x1]
-                    x2_coord = [x2, dimension2 - 1 - x2]
-
-                    coords = [(x1_coord[0], x2_coord[0]), (x1_coord[1], x2_coord[0]),
-                              (x1_coord[0], x2_coord[1]), (x1_coord[1], x2_coord[0])]
-                    clause.append(self.ord[1][min(self.node_map[x] for x in coords)])
-
-            self.formula.append(clause)
 
         return self.formula
 

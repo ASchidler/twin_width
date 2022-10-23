@@ -10,13 +10,13 @@ import encoding3
 
 # g, steps_limit = grid_2d_graph(7, 7), 35
 # g, steps_limit = grid_2d_graph(9, 6), 44 # 46 (43)
-g, steps_limit = grid_2d_graph(8, 6), 50
+g, steps_limit = grid_2d_graph(6, 6), 50
 
 print(len(g.nodes))
 
 # enc = encoding.TwinWidthEncoding(use_sb_static=False, use_sb_static_full=False)
 # enc = encoding2.TwinWidthEncoding2(g, cubic=2, sb_ord=False, sb_static=0, sb_static_full=False, is_grid=False)
-enc = encoding3.TwinWidthEncoding2(g, cubic=2, sb_static=sys.maxsize, sb_ord=False, sb_static_full=True, sb_static_diff=True, is_grid=False)
+enc = encoding3.TwinWidthEncoding2(g, cubic=2, sb_static=1, sb_ord=False, sb_static_full=True, sb_static_diff=True, break_g_symmetry=False)
 result = enc.run(g, slv.Cadical, 3, steps_limit=steps_limit, write=True)
 
 

@@ -26,6 +26,8 @@ output_path = f"random_results_{tenc}.csv"
 def compute_graph(args):
     c_p, c_g_size = args
     g = gnp_random_graph(c_g_size, c_p)
+    if c_p > 0.5:
+        g = nx.complement(g)
     # for cl in nx.generate_edgelist(g):
     #     print(cl)
 
