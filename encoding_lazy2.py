@@ -344,7 +344,7 @@ class TwinWidthEncoding2:
 
         return self.formula
 
-    def run(self, g, solver, start_bound, verbose=True, check=True, timeout=0, i_od=None, i_mg=None, steps_limit=sys.maxsize):
+    def run(self, g, solver, start_bound, verbose=True, check=True, timeout=0, i_od=None, i_mg=None, steps_limit=sys.maxsize, write=False):
         if len(g.nodes) <= 2:
             return 0
 

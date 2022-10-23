@@ -21,12 +21,13 @@ results = {}
 pool_size = 1
 
 tenc = int(sys.argv[1])
+output_path = f"random_results_{tenc}.csv"
 
 def compute_graph(args):
     c_p, c_g_size = args
     g = gnp_random_graph(c_g_size, c_p)
-    for cl in nx.generate_edgelist(g):
-        print(cl)
+    # for cl in nx.generate_edgelist(g):
+    #     print(cl)
 
     components = list(nx.connected_components(g))
     tww = 0
@@ -44,17 +45,38 @@ def compute_graph(args):
         else:
             enc = encoding3.TwinWidthEncoding2(g, cubic=2, sb_ord=False, sb_static=0, sb_static_full=True, sb_static_diff=False)
         # enc = encoding_lazy2.TwinWidthEncoding2(g, cubic=True, sb_ord=True)
-        result = enc.run(cg, Cadical, heuristic.get_ub(cg), check=False, verbose=True)
+        result = enc.run(cg, Cadical, heuristic.get_ub(cg), check=False, verbose=False)
         if isinstance(result, int):
             tww = max(tww, result)
         else:
             tww = max(tww, result[0])
     return tww, (time.time() - start)
 
+c_nodes = None
+c_cp = None
 
-with open(f"random_results_{tenc}.csv", "w") as results_f:
-    for g_size in range(g_min_size, g_max_size+1, g_increment):
-        cp = increment
+if os.path.exists(output_path):
+    with open(output_path) as inp:
+        for cl in inp:
+            fields = cl.split(";")
+            c_nodes = int(fields[0])
+            c_cp = float(fields[1])
+
+if c_nodes is not None:
+    print(f"Starting from {c_nodes}/{c_cp}")
+else:
+    c_nodes = g_min_size
+
+c_nodes = max(c_nodes, g_min_size)
+
+with open(output_path, "a") as results_f:
+    for g_size in range(c_nodes, g_max_size+1, g_increment):
+        if c_cp is not None:
+            cp = c_cp + increment
+            c_cp = None
+        else:
+            cp = increment
+
         results[g_size] = {}
         while cp < 1:
             with Pool(pool_size) as pool:

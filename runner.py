@@ -106,7 +106,7 @@ else:
     # enc = lazy.TwinWidthEncoding()
     # enc = encoding2.TwinWidthEncoding2(g, cubic=2)
     # enc = lazy2.TwinWidthEncoding2(g, cubic=False)
-    cb = enc.run(g, slv.Cadical, ub, verbose=args.verbose, write=True, i_od=[1])
+    cb = enc.run(g, slv.Cadical, ub-2, verbose=args.verbose, write=True, steps_limit=40)
 
 print(f"Finished")
 print(f"{cb}")

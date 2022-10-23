@@ -93,7 +93,6 @@ class TwinWidthEncoding2:
                 self.formula.append([-self.ord[t][n]])
             self.formula.extend(
                 CardEnc.atmost([self.ord[t][i] for i in range(1, n+1)], bound=1, vpool=self.pool))
-
             self.formula.append([self.ord[t][i] for i in range(1, n + 1)])
 
         # Make sure each node is assigned only once...
@@ -116,7 +115,6 @@ class TwinWidthEncoding2:
             for i in range(1, n+1):
                 # Do not merge with yourself
                 self.formula.append([-self.ord_vars[i][t], -self.merge[t][i]])
-
                 # Lex ordering
                 self.formula.append([-self.merge[t][i], *[self.ord[t][j] for j in range(1, i)]])
 
@@ -132,6 +130,7 @@ class TwinWidthEncoding2:
                         self.formula.append([-self.ord[t][i], self.tred(t-1, i, k), -self.merged_edge[t][k]])
 
         for i in range(1, n):
+            self.formula.append([self.ord_vars[i][steps-1], self.real_merge[i][n]])
             self.formula.extend(CardEnc.atmost([self.real_merge[i][j] for j in range(i + 1, n + 1)], vpool=self.pool))
 
     def encode_sb_order(self, n, d, steps, max_diff=sys.maxsize):
@@ -154,64 +153,64 @@ class TwinWidthEncoding2:
                     self.formula.append([-aux_dec_s, ord_dec[t][i]])
                     clause.append(aux_dec_s)
                 self.formula.append(clause)
-        #
-        # for t in range(1, steps-2):
-        #     decs = [self.pool.id(f"ord_dec_{t}_{i}") for i in range(1, n+1)]
-        #     for i in range(t+1, n+1):
-        #         aux = self.pool.id(f"exceeded_{t}_{i}")
-        #         self.formula.append([-self.ord[t][i], aux, *decs])
-        #         if t > 1:
-        #             self.formula.append([-self.pool.id(f"exceeded_{t-1}_{i}"), self.pool.id(f"exceeded_{t}_{i}"), *decs])
-        #
-        #     for i in range(1, n+1):
-        #         for j in range(n+1, 1):
-        #             self.formula.append([-self.ord[t][i], -self.pool.id(f"exceeded_{t}_{j}")])
+
+        for t in range(1, steps-2):
+            decs = [self.pool.id(f"ord_dec_{t}_{i}") for i in range(1, n+1)]
+            for i in range(t+1, n+1):
+                aux = self.pool.id(f"exceeded_{t}_{i}")
+                self.formula.append([-self.ord[t][i], aux, *decs])
+                if t > 1:
+                    self.formula.append([-self.pool.id(f"exceeded_{t-1}_{i}"), self.pool.id(f"exceeded_{t}_{i}"), *decs])
+
+            for i in range(1, n+1):
+                for j in range(n+1, 1):
+                    self.formula.append([-self.ord[t][i], -self.pool.id(f"exceeded_{t}_{j}")])
 
         # Full
-        ord_dec_t = [[{} for _ in range(0, n+1)] for _ in range(0, n + 1)]
-        exceeded = [{} for _ in range(0, n + 1)]
-
-        for t in range(1, steps-1):
-            for i in range(t+1, n+1):
-                exceeded[t][i] = self.pool.id(f"exceeded_{t}_{i}")
-                self.formula.append([-self.ord[t][i], exceeded[t][i]])
-
-        for t in range(2, steps):
-            for i in range(2, n+1):
-                exceeded[t][i] = self.pool.id(f"exceeded_{t}_{i}")
-                # self.formula.append([-exceeded[t][i], exceeded[t-1][i], self.ord[t][i]])
-
-        for t in range(2, steps):
-            for i in range(2, n+1):
-                for j in range(1, n+1):
-                    if i != j:
-                        ord_dec_t[t][i][j] = self.pool.id(f"ord_dec_t_{t}_{i}_{j}")
-
-                        if t == 2:
-                            self.formula.append([-ord_dec_t[t][i][j], ord_dec[t][j]])
-                        else:
-                            self.formula.append([-ord_dec_t[t][i][j], ord_dec[t][j], ord_dec_t[t-1][i][j]])
-                            self.formula.append([-ord_dec_t[t - 1][i][j], -exceeded[t][i], ord_dec_t[t][i][j]])
-
-                        self.formula.append([-ord_dec_t[t][i][j], exceeded[t][i]])
-                        self.formula.append([-ord_dec[t][j], -exceeded[t][i], ord_dec_t[t][i][j]])
-
-        for t in range(2, steps):
-            for i in range(1, n+1):
-                if t > 1:
-                    for j in range(2, n+1):
-                        if i != j:
-                            ok_aux = self.pool.id(f"is_ok_{t}_{j}_{i}")
-                            self.formula.append([self.counters[t-1][i][d], -self.counters[t][i][d],  -ord_dec_t[t][j][i], ok_aux])
-                            self.formula.append([-self.counters[t-1][i][d], -ok_aux])
-                            self.formula.append([ord_dec_t[t][j][i], -ok_aux])
-                            self.formula.append([self.counters[t][i][d], -ok_aux])
-
-                    if i > 1 and t < steps - 1:
-                        self.formula.append([-exceeded[t][i], *[self.pool.id(f"is_ok_{t}_{i}_{j}") for j in range(1, n+1) if i != j], exceeded[t+1][i]])
-
-                    for j in range(i+1, n+1):
-                        self.formula.append([-self.ord[t][i], -exceeded[t][j]])
+        # ord_dec_t = [[{} for _ in range(0, n+1)] for _ in range(0, n + 1)]
+        # exceeded = [{} for _ in range(0, n + 1)]
+        #
+        # for t in range(1, steps-1):
+        #     for i in range(t+1, n+1):
+        #         exceeded[t][i] = self.pool.id(f"exceeded_{t}_{i}")
+        #         self.formula.append([-self.ord[t][i], exceeded[t][i]])
+        #
+        # for t in range(2, steps):
+        #     for i in range(2, n+1):
+        #         exceeded[t][i] = self.pool.id(f"exceeded_{t}_{i}")
+        #         # self.formula.append([-exceeded[t][i], exceeded[t-1][i], self.ord[t][i]])
+        #
+        # for t in range(2, steps):
+        #     for i in range(2, n+1):
+        #         for j in range(1, n+1):
+        #             if i != j:
+        #                 ord_dec_t[t][i][j] = self.pool.id(f"ord_dec_t_{t}_{i}_{j}")
+        #
+        #                 if t == 2:
+        #                     self.formula.append([-ord_dec_t[t][i][j], ord_dec[t][j]])
+        #                 else:
+        #                     self.formula.append([-ord_dec_t[t][i][j], ord_dec[t][j], ord_dec_t[t-1][i][j]])
+        #                     self.formula.append([-ord_dec_t[t - 1][i][j], -exceeded[t][i], ord_dec_t[t][i][j]])
+        #
+        #                 self.formula.append([-ord_dec_t[t][i][j], exceeded[t][i]])
+        #                 self.formula.append([-ord_dec[t][j], -exceeded[t][i], ord_dec_t[t][i][j]])
+        #
+        # for t in range(2, steps):
+        #     for i in range(1, n+1):
+        #         if t > 1:
+        #             for j in range(2, n+1):
+        #                 if i != j:
+        #                     ok_aux = self.pool.id(f"is_ok_{t}_{j}_{i}")
+        #                     self.formula.append([self.counters[t-1][i][d], -self.counters[t][i][d],  -ord_dec_t[t][j][i], ok_aux])
+        #                     self.formula.append([-self.counters[t-1][i][d], -ok_aux])
+        #                     self.formula.append([ord_dec_t[t][j][i], -ok_aux])
+        #                     self.formula.append([self.counters[t][i][d], -ok_aux])
+        #
+        #             if i > 1 and t < steps - 1:
+        #                 self.formula.append([-exceeded[t][i], *[self.pool.id(f"is_ok_{t}_{i}_{j}") for j in range(1, n+1) if i != j], exceeded[t+1][i]])
+        #
+        #             for j in range(i+1, n+1):
+        #                 self.formula.append([-self.ord[t][i], -exceeded[t][j]])
 
     def sb_ord2(self, n, d, g, steps):
         """Enforce lex ordering whenever there is no node that reaches the bound at time t"""
@@ -256,7 +255,7 @@ class TwinWidthEncoding2:
                 sd.discard(n2)
 
                 if len(sd) > d:
-                    if self.sb_static_full:
+                    if self.sb_static_full and len(sd) > d + 1:
                         lits = [self.pool.id(f"static_st_{n1}_{cn}") for cn in sd]
                         with ITotalizer(lits, ubound=d, top_id=self.pool.id(f"static_full_{n1}_{n2}")) as tot:
                             self.pool.occupy(self.pool.top - 1, tot.top_id)
@@ -269,36 +268,39 @@ class TwinWidthEncoding2:
 
                         for t in range(1, min(steps, self.sb_static)):
                             for cn in sd:
-                                cl = [self.pool.id(f"static_st_{n1}_{cn}"), -self.ord[t][n1]]
-                                for t2 in range(1, t):
-                                    cl.append(self.ord[t2][cn])
-
-                                self.formula.append(cl)
+                                self.formula.append([-self.ord_vars[n1][t], self.ord_vars[cn][t], self.pool.id(f"static_st_{n1}_{cn}")])
+                                # cl = [self.pool.id(f"static_st_{n1}_{cn}"), -self.ord[t][n1]]
+                                # for t2 in range(1, t):
+                                #     cl.append(self.ord[t2][cn])
+                                #
+                                # self.formula.append(cl)
 
                     for t in range(1, len(sd)-d):
-                        self.formula.append([-self.ord[t][n1], -self.merge[t if self.cubic == 2 else n1][n2]])
+                        self.formula.append([-self.ord[t][n1], -self.real_merge[n1][n2]])
+
+                    if self.sb_static_full and len(sd) > d + 1:
+                        self.formula.append(
+                            [-self.real_merge[n1][n2], -self.static_card[n1][n2][d]])
 
                     for t in range(len(sd)-d, min(steps, self.sb_static)):
                         if len(sd) - d > 1 and self.sb_static_full:
-                            if self.cubic == 2:
-                                self.formula.append(
-                                    [-self.ord[t][n1], -self.merge[t][n2], -self.static_card[n1][n2][d]])
-
+                            # self.formula.append(
+                            #     [-self.ord[t][n1], -self.merge[t][n2], -self.static_card[n1][n2][d]])
                             if self.sb_static_diff:
-                                for cd in range(1, d):
+                                for cd in range(1, d+1):
                                     if cd > 0:
-                                        # There might be a red edge between i and j and some other node that might be contracted away, so + 1
+                                        # There might be a red edge between n1 and n2 and some other node that might be contracted away, so + 1
                                         self.formula.append([-self.ord[t][n1],
-                                                        -self.merge[t if self.cubic == 2 else n1][n2],
+                                                        -self.real_merge[n1][n2],
                                                         -self.counters[t-1][n2][cd],
                                                         -self.static_card[n1][n2][d - cd + 1]])
                                     self.formula.append([-self.ord[t][n1],
-                                                    -self.merge[t if self.cubic == 2 else n1][n2],
-                                                    self.tred(t - 1, n1, n2),
+                                                    -self.real_merge[n1][n2],
+                                                    self.tred(t - 1, n1, n2), # Edge did not exist -> tighten bound
                                                     -self.counters[t-1][n2][cd],
                                                     -self.static_card[n1][n2][d - cd]])
                         else:
-                            cl = [-self.ord[t][n1], -self.merge[t if self.cubic == 2 else n1][n2]]
+                            cl = [-self.ord[t][n1], -self.real_merge[n1][n2]]
                             for i in sd:
                                 cl.append(self.ord_vars[i][t])
                             self.formula.append(cl)
@@ -338,7 +340,8 @@ class TwinWidthEncoding2:
                     for k in diff:
                         # start = [-self.ord[t][i], -self.real_merge[i][j], self.tred(t, j, k), *[self.ord[t2][k] for t2 in range(1, t)]]
                         if t > 1:
-                            start = [-self.ord_vars[i][t], self.ord_vars[j][t], self.ord_vars[k][t], -self.real_merge[i][j], self.tred(t, j, k)]
+                            start = [-self.ord_vars[i][t], self.ord_vars[j][t], self.ord_vars[k][t],
+                                     -self.real_merge[i][j], self.tred(t, j, k)]
                         else:
                             start = [-self.ord[t][i], -self.real_merge[i][j], self.tred(t, j, k)]
 
@@ -465,7 +468,7 @@ class TwinWidthEncoding2:
 
     def encode(self, g, d, od=None, mg=None, steps=None):
         if steps is None:
-            steps = len(g.nodes) - d
+            steps = len(g.nodes) - d - 1
 
         g = self.remap_graph(g)
         n = len(g.nodes)
@@ -494,8 +497,8 @@ class TwinWidthEncoding2:
         self.encode_vertex_counters(n, d, steps)
 
         if self.sb_ord:
-            self.sb_ord2(n, d, g, steps)
-            # self.encode_sb_order(n, d, steps)
+            # self.sb_ord2(n, d, g, steps)
+            self.encode_sb_order(n, d, steps)
         if self.twohop:
             self.sb_twohop(n, g, steps, True)
 
@@ -563,6 +566,7 @@ class TwinWidthEncoding2:
                             overall_clause.append(aux)
 
                         self.formula.append(overall_clause)
+
     def run(self, g, solver, start_bound, verbose=True, check=True, lb = 0, timeout=0, i_od=None, i_mg=None, steps_limit=None, write=False):
         if len(g.nodes) < 4:
             return 0, None, None

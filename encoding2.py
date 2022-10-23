@@ -102,7 +102,7 @@ class TwinWidthEncoding2:
 
             # Make implication an equivalence, causes speedup
             for t in range(1, steps):
-                self.formula.append([*[self.ord[t2][i] for t2 in range(1, t + 1)], -self.ord_vars[i][t]])
+                self.formula.append([*[self.ord[t2][i] for t2 in range(1, t+1)], -self.ord_vars[i][t]])
 
     def encode_merge(self, n, steps):
         if self.cubic < 2:
