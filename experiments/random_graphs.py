@@ -12,13 +12,13 @@ import heuristic
 
 increment = 0.02
 num_graphs = 100
-g_min_size = 20
+g_min_size = 15
 g_increment = 5
-g_max_size = 20
+g_max_size = 15
 
 results = {}
 
-pool_size = 1
+pool_size = 5
 
 tenc = int(sys.argv[1])
 output_path = f"random_results_{tenc}.csv"
@@ -45,14 +45,14 @@ def compute_graph(args):
         elif tenc == 1:
             enc = encoding2.TwinWidthEncoding2(g, cubic=2, sb_ord=False, sb_static=0, sb_static_full=True, sb_static_diff=False)
         else:
-            enc = encoding3.TwinWidthEncoding2(g, cubic=2, sb_ord=False, sb_static=0, sb_static_full=True, sb_static_diff=False)
+            enc = encoding3.TwinWidthEncoding2(g, cubic=2, sb_ord=True, sb_static=sys.maxsize, sb_static_full=True, sb_static_diff=False)
         # enc = encoding_lazy2.TwinWidthEncoding2(g, cubic=True, sb_ord=True)
         result = enc.run(cg, Cadical, heuristic.get_ub(cg), check=False, verbose=False)
         if isinstance(result, int):
             tww = max(tww, result)
         else:
             tww = max(tww, result[0])
-    return tww, (time.time() - start)
+    return tww, (time.time() - start), c_p, c_g_size
 
 c_nodes = None
 c_cp = None
@@ -71,29 +71,46 @@ else:
 
 c_nodes = max(c_nodes, g_min_size)
 
-with open(output_path, "a") as results_f:
-    for g_size in range(c_nodes, g_max_size+1, g_increment):
-        if c_cp is not None:
-            cp = c_cp + increment
-            c_cp = None
+
+def enumerate_graphs(start_c, start_p):
+    for g_size in range(start_c, g_max_size + 1, g_increment):
+        if start_p is not None:
+            cp = start_p + increment
+            start_p = None
         else:
             cp = increment
 
         results[g_size] = {}
         while cp < 1:
-            with Pool(pool_size) as pool:
+            cp = round(cp, 2)
+            for _ in range(0, num_graphs):
+                yield cp, g_size
+            cp += increment
+
+
+with open(output_path, "a") as results_f:
+    with Pool(pool_size) as pool:
+        curr_cp = None
+        curr_size = None
+
+        for c_tww, c_rt, c_cp, c_cs in pool.imap(compute_graph, enumerate_graphs(c_nodes, c_cp)):
+            if curr_cp != c_cp or curr_size != c_cs:
+                if curr_cp is not None and curr_size is not None:
+                    c_total /= num_graphs
+                    total_rt /= num_graphs
+                    print(f"{curr_size} {curr_cp} {c_total:.2f} {total_rt:.2f} Graphs: {finished}")
+                    sys.stdout.flush()
+                    results_f.write(f"{curr_size};{curr_cp};{c_total};{total_rt}{os.linesep}")
+                    results_f.flush()
+
                 c_total = 0
                 finished = 0
                 total_rt = 0
-                for c_tww, c_rt in pool.imap_unordered(compute_graph, ((cp, g_size) for _ in range(0, num_graphs))):
-                    c_total += c_tww
-                    total_rt += c_rt
-                    finished += 1
-                pool.close()
-                pool.join()
-                results[g_size][cp] = c_total / num_graphs
-                total_rt /= num_graphs
-                print(f"{g_size} {cp} {results[g_size][cp]} {total_rt:.2f}")
-                results_f.write(f"{g_size};{cp};{results[g_size][cp]};{total_rt}{os.linesep}")
-                results_f.flush()
-                cp += increment
+                curr_cp = c_cp
+                curr_size = c_cs
+            c_total += c_tww
+            total_rt += c_rt
+            finished += 1
+
+        pool.close()
+        pool.join()
