@@ -1,0 +1,21 @@
+c description: Random 3-CNF over 15 variables and 15 clauses
+c generator: CNFgen (0.9.0)
+c copyright: (C) 2012-2020 Massimo Lauria <massimo.lauria@uniroma1.it>
+c url: https://massimolauria.net/cnfgen
+c
+p cnf 15 15
+-7 9 11 0
+1 -6 -14 0
+-6 7 11 0
+-2 3 11 0
+-7 10 -13 0
+-5 -9 -11 0
+-3 11 -12 0
+-1 4 -5 0
+1 7 12 0
+6 8 13 0
+2 -6 -7 0
+6 13 -14 0
+-3 6 7 0
+4 8 10 0
+2 3 11 0
