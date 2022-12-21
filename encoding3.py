@@ -215,6 +215,124 @@ class TwinWidthEncoding2:
                     for j in range(i+1, n+1):
                         self.formula.append([-self.ord[t][i], -exceeded[t][j]])
 
+    def encode_sb_order2(self, n, d, steps, max_diff=sys.maxsize):
+        """Enforce lex ordering whenever there is no node that reaches the bound at time t"""
+        if d == 0:
+            return
+
+        # ord_decx = [{} for _ in range(0, n + 1)]
+        #
+        # for t in range(3, steps):
+        #     for i in range(1, n + 1):
+        #         ord_decx[t][i] = self.pool.id(f"ord_decx_{t}_{i}")
+        #
+        #         for cd in range(1, d + 1):
+        #             aux = self.pool.id(f"ord_decx_{t}_{i}_{cd}")
+        #             if cd < d:
+        #                 self.formula.append(
+        #                     [-self.merge[t][i], -self.counters[t - 2][i][cd], self.counters[t - 1][i][cd],
+        #                      -self.counters[t][i][d], self.ord_vars[i][t], ord_decx[t][i]])
+        #                 # self.formula.append([-self.merge[t][i], -self.counters[t - 2][i][cd], self.counters[t - 1][i][cd], -self.counters[t][i][d], ord_dec[t][i]])
+        #             else:
+        #                 self.formula.append(
+        #                     [-self.counters[t - 2][i][cd], self.counters[t - 1][i][cd], -self.counters[t][i][d],
+        #                      self.ord_vars[i][t], ord_decx[t][i]])
+        #                 # self.formula.append([-self.counters[t - 2][i][cd], self.counters[t - 1][i][cd], -self.counters[t][i][d], ord_dec[t][i]])
+        #
+        #             self.formula.append(
+        #                 [-self.counters[t - 2][i][cd], self.counters[t - 1][i][cd], self.ord_vars[i][t], aux])
+        #             # self.formula.append([-self.counters[t - 2][i][cd], self.counters[t - 1][i][cd], aux])
+        #             self.formula.append([-aux, self.counters[t - 2][i][cd]])
+        #             self.formula.append([-aux, -self.counters[t - 1][i][cd]])
+        #             self.formula.append([-aux, -self.ord_vars[i][t]])
+        #             self.formula.append(
+        #                 [-ord_decx[t][i], -self.merge[t][i], -self.counters[t - 2][i][cd], self.ord_vars[i][t],
+        #                  -self.counters[t - 1][i][cd]])
+        #             # self.formula.append([-ord_dec[t][i], -self.merge[t][i], -self.counters[t-2][i][cd], -self.counters[t-1][i][cd]])
+        #
+        #         self.formula.append([-ord_decx[t][i], self.counters[t][i][d]])
+        #         self.formula.append([-ord_decx[t][i], self.counters[t - 2][i][1]])
+        #         self.formula.append([-ord_decx[t][i], -self.ord_vars[i][t]])
+        #         self.formula.append([-ord_decx[t][i], self.merge[t][i], self.counters[t - 2][i][d]])
+        #         self.formula.append([-ord_decx[t][i], self.merge[t][i], -self.counters[t - 1][i][d]])
+
+        ord_dec = [{} for _ in range(0, n + 1)]
+
+        for t in range(2, steps):
+            for i in range(1, n + 1):
+                ord_dec[t][i] = self.pool.id(f"ord_dec_{t}_{i}")
+
+                # Works worse than solution below
+                # aux_source = self.merged_edge[t][i]
+                # aux_target = self.pool.id(f"mergeexists_{t}_{i}")
+                # self.formula.append([-aux_source, -aux_target, self.merge[t][i], ord_dec[t][i]])
+                # self.formula.append([-ord_dec[t][i], self.merge[t][i], aux_source])
+                # self.formula.append([-ord_dec[t][i], self.merge[t][i], aux_target])
+                # for j in range(1, i):
+                #     self.formula.append([-ord_dec[t][i], -self.real_merge[j][i], -self.ord[t][j], self.tred(t-1, i, j)])
+                #     self.formula.append([ord_dec[t][i], -self.real_merge[j][i], -self.ord[t][j], -self.tred(t - 1, i, j)])
+
+                clause = [-ord_dec[t][i]]
+                for cd in range(1, d + 1):
+                    aux_dec_s = self.pool.id(f"ord_dec_{t}_{i}_{cd}")
+                    self.formula.append([-self.counters[t - 1][i][cd], self.counters[t][i][cd], aux_dec_s])
+                    self.formula.append([-aux_dec_s, self.counters[t - 1][i][cd]])
+                    self.formula.append([-aux_dec_s, -self.counters[t][i][cd]])
+                    self.formula.append([-aux_dec_s, -self.ord_vars[i][t], ord_dec[t][i]])
+                    clause.append(aux_dec_s)
+                self.formula.append(clause)
+                self.formula.append([-ord_dec[t][i], -self.ord_vars[i][t]])
+
+        # Full
+        ord_dec_t = [[{} for _ in range(0, n + 1)] for _ in range(0, n + 1)]
+        exceeded = [{} for _ in range(0, n + 1)]
+
+        for t in range(2, steps):
+            for i in range(2, n + 1):
+                exceeded[t][i] = self.pool.id(f"exceeded_{t}_{i}")
+                self.formula.append([-self.ord[t][i], exceeded[t][i]])
+
+        for t in range(2, steps):
+            for i in range(2, n + 1):
+                for j in range(1, n + 1):
+                    if i != j:
+                        ord_dec_t[t][i][j] = self.pool.id(f"ord_dec_t_{t}_{i}_{j}")
+
+                        if t == 2:
+                            self.formula.append([-ord_dec_t[t][i][j], ord_dec[t][j]])
+                        else:
+                            self.formula.append([-ord_dec_t[t][i][j], ord_dec[t][j], ord_dec_t[t - 1][i][j]])
+                            self.formula.append([-ord_dec_t[t - 1][i][j], -exceeded[t][i], ord_dec_t[t][i][j]])
+
+                        self.formula.append([-ord_dec_t[t][i][j], exceeded[t][i]])
+                        self.formula.append([-ord_dec[t][j], -exceeded[t][i], ord_dec_t[t][i][j]])
+
+        for t in range(2, steps):
+            for i in range(1, n + 1):
+                if t > 1:
+                    for j in range(2, n + 1):
+                        if i != j:
+                            ok_aux = self.pool.id(f"is_ok_{t}_{j}_{i}")
+                            self.formula.append([self.counters[t - 1][i][d], -self.counters[t][i][d] -ord_dec_t[t][j][i], ok_aux])
+                            self.formula.append([-self.counters[t - 1][i][d], -ok_aux])
+                            self.formula.append([ord_dec_t[t][j][i], -ok_aux])
+                            self.formula.append([self.counters[t][i][d], -ok_aux])
+
+                            # If the decreased vertex is not the merge vertex it had to be at the limit at some point
+                            self.formula.append([-ok_aux, self.merge[t][i], *[self.pool.id(f"ord_dec_{t2}_{i}_{d}") for t2 in range(2, t)]])
+
+                    if i > 1 and t < steps - 1:
+                        self.formula.append(
+                            [-exceeded[t][i],
+                             *[self.pool.id(f"is_ok_{t}_{i}_{j}") for j in range(1, n + 1) if i != j],
+                             exceeded[t + 1][i]])
+
+                    for j in range(i + 1, n + 1):
+                        self.formula.append([-self.ord[t][i], -exceeded[t][j]])
+                        # if t > 2:
+                        #     self.formula.append([-self.ord[t][i], -self.ord_vars[j][t], *[ord_decx[t][k] for k in range(1, n + 1)]])
+
+
     def sb_ord2(self, n, d, g, steps):
         """Enforce lex ordering whenever there is no node that reaches the bound at time t"""
         if d == 0:
@@ -537,8 +655,8 @@ class TwinWidthEncoding2:
 
 
         if self.sb_ord:
-            self.sb_ord2(n, d, g, steps)
-            # self.encode_sb_order(n, d, steps)
+            # self.sb_ord2(n, d, g, steps)
+            self.encode_sb_order2(n, d, steps)
         if self.twohop:
             self.sb_twohop(n, g, steps, True)
 
@@ -666,6 +784,59 @@ class TwinWidthEncoding2:
             timer.cancel()
         if verbose:
             print(f"Finished in {time.time() - start}")
+        if od is None:
+            return cb
+        else:
+            return cb, od, mg
+
+
+    def start_incremental(self, g, solver, start_bound, verbose=True, i_od=None, i_mg=None, steps_limit=None, write=False):
+        if len(g.nodes) < 4:
+            return 0, None, None
+
+        start = time.time()
+
+        self.steps = steps_limit
+        if steps_limit is None:
+            self.steps = len(g.nodes) - start_bound - 1
+
+        self.solver = solver()
+        self.bound = start_bound
+        formula = self.encode(g, start_bound, i_od, i_mg, self.steps)
+        self.solver.append_formula(formula)
+
+        if verbose:
+            print(f"Created encoding in {time.time() - start} {len(formula.clauses)}/{formula.nv}")
+            print(f"Solver clauses {self.solver.nof_clauses()}/{self.solver.nof_vars()}")
+
+    def run_incremental(self, i_od, i_mg, verbose=False):
+        start = time.time()
+        assumptions = []
+        od = None
+        mg = None
+        cb = self.bound + 1
+
+        if i_od is not None:
+            for i, u in enumerate(i_od):
+                if i + 1 < self.steps:
+                    assumptions.append(self.ord[i+1][u])
+
+        if i_mg is not None:
+            for i, u in enumerate(i_od):
+                if i + 1 < self.steps:
+                    assumptions.append(self.merge[i+1][i_mg[u]])
+
+        if self.solver.solve(assumptions):
+            if verbose:
+                print(f"Found Model")
+            cb, od, mg = self.decode(self.solver.get_model(), self.g, self.bound, self.steps, verbose)
+        else:
+            if verbose:
+                print(f"Unsat {i_mg}")
+
+        if verbose:
+            print(f"Finished cycle in {time.time() - start}")
+
         if od is None:
             return cb
         else:

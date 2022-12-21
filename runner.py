@@ -104,7 +104,7 @@ else:
                                            sb_static_full=args.contraction_full,
                                            cubic=2, sb_static_diff=args.contraction_diff, break_g_symmetry=True)
 
-    cb = enc.run(g, slv.Cadical, ub, verbose=args.verbose, write=False)
+    cb = enc.run(g, slv.Cadical, ub-1, verbose=args.verbose, write=True, steps_limit=40)
 
 print(f"Finished")
 print(f"{cb}")

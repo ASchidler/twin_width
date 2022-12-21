@@ -13,8 +13,8 @@ import encoding2
 import encoding3
 import encoding_lazy2
 
-min_steps = 7
-timeout = 3600
+min_steps = 4
+timeout = 30
 use_seen = False
 verify = False
 pool_size = 3
@@ -143,10 +143,13 @@ def generate_instances(cgg, c_minsteps, created):
     with open(outp_file, "a") as outp:
         q = []
 
-        # TODO: There are more valid starting assign,emts
-        q.append((cgg, (1, 2), [], defaultdict(bool), {2: [1, 2]}, defaultdict(list), defaultdict(list), set()))
-        q.append((cgg, (1, 4), [], defaultdict(bool), {4: [1, 4]}, defaultdict(list), defaultdict(list), set()))
-        q.append((cgg, (1, 5), [], defaultdict(bool), {5: [1, 5]}, defaultdict(list), defaultdict(list), set()))
+        for ci in range(1, len(cgg.nodes)+1):
+            for cj in range(ci+1, len(cgg.nodes) + 1):
+                if (ci, cj) not in done or done[(ci, cj)] != 1:
+                    q.append((cgg, (ci, cj), [], defaultdict(bool), {cj: [ci, cj]}, defaultdict(list), defaultdict(list), set()))
+        # q.append((cgg, (1, 2), [], defaultdict(bool), {2: [1, 2]}, defaultdict(list), defaultdict(list), set()))
+        # q.append((cgg, (1, 4), [], defaultdict(bool), {4: [1, 4]}, defaultdict(list), defaultdict(list), set()))
+        # q.append((cgg, (1, 5), [], defaultdict(bool), {5: [1, 5]}, defaultdict(list), defaultdict(list), set()))
 
         while q:
             cg, cm, cs, changed, parts, transferred, lowered, justified = q.pop()
@@ -334,22 +337,30 @@ def generate_instances(cgg, c_minsteps, created):
                     else:
                         break
 
-def compute_graph(argsx):
-    args, enc = argsx
+# if enc == 0:
+#     cenc = encoding2.TwinWidthEncoding2(g, cubic=2, sb_ord=True, sb_static=1, sb_static_full=False,
+#                                         is_grid=False)
+#     cenc = encoding3.TwinWidthEncoding2(g, cubic=2, sb_ord=False, sb_static=1)
+# elif enc == 1:
+#     cenc = encoding2.TwinWidthEncoding2(g, cubic=2, sb_ord=False, sb_static=0, sb_static_full=False,
+#                                         is_grid=False)
+# else:
+#     cenc = encoding.TwinWidthEncoding(use_sb_static=True, use_sb_static_full=True)
+
+
+solver = None
+def compute_graph(args):
+    global solver
     ord = [x for x, y in args]
     mg = {x: y for x, y in args}
+    if solver is None:
+        solver = encoding3.TwinWidthEncoding2(g, cubic=2, sb_ord=True, sb_static=sys.maxsize, sb_static_full=True,
+                                              break_g_symmetry=True)
+        solver.start_incremental(g, solver=Cadical, start_bound=3, verbose=False, steps_limit=max_steps)
 
-    if enc == 0:
-        cenc = encoding2.TwinWidthEncoding2(g, cubic=2, sb_ord=True, sb_static=1, sb_static_full=False,
-                                           is_grid=False)
-        cenc = encoding3.TwinWidthEncoding2(g, cubic=2, sb_ord=False, sb_static=1)
-    elif enc == 1:
-        cenc = encoding2.TwinWidthEncoding2(g, cubic=2, sb_ord=False, sb_static=0, sb_static_full=False,
-                                            is_grid=False)
-    else:
-        cenc = encoding.TwinWidthEncoding(use_sb_static=True, use_sb_static_full=True)
+    result = solver.run_incremental(ord, mg, False)
 
-    result = cenc.run(g, solver=Cadical, start_bound=3, i_od=ord, i_mg=mg, verbose=True, steps_limit=max_steps)
+    # result = cenc.run(g, solver=Cadical, start_bound=3, i_od=ord, i_mg=mg, verbose=True, steps_limit=max_steps)
 
     if isinstance(result, int) or len(result) == 2:
         return args
@@ -373,12 +384,12 @@ def generate_verification():
 
 
 if __name__ == '__main__':
-    for csteps in range(min_steps, max_steps):
-        cnt = 1
-        for cx in generate_instances(gn, csteps, []) if not verify else generate_verification():
-            print(f"{csteps}:{cnt} {cx}")
-            cnt += 1
-        exit(0)
+    # for csteps in range(min_steps, max_steps):
+    #     cnt = 1
+    #     for cx in generate_instances(gn, csteps, []) if not verify else generate_verification():
+    #         print(f"{csteps}:{cnt} {cx}")
+    #         cnt += 1
+    #     exit(0)
 
     with open(outp_file if not verify else outp_file+".verified", "a") as outp:
         with open(outp_file+".to", "a") as outp_to:
@@ -387,7 +398,7 @@ if __name__ == '__main__':
                 cnt = 0
                 with ProcessPool(max_workers=pool_size) as pool:
                     if not verify:
-                        future = pool.map(compute_graph, ((x, i) for x in generate_instances(gn, c_steps, c_created) for i in range(0, enc_count)), chunksize=1, timeout=timeout)
+                        future = pool.map(compute_graph, generate_instances(gn, c_steps, c_created), chunksize=1, timeout=timeout)
                     else:
                         future = pool.map(compute_graph, ((x, i) for x in generate_verification() for i in range(0, enc_count)), chunksize=1, timeout=timeout)
 
