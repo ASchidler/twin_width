@@ -595,7 +595,7 @@ class TwinWidthEncoding2:
 
     def wcnf_export(self, g, start_bound, filename, export_cards):
         formula = self.encode(g, start_bound+1, None, None, steps=len(g.nodes))
-        wcnf = WCNF()
+        wcnf = WCNF() if not export_cards else CNF()
         wcnf.extend(formula)
 
         if not export_cards:
