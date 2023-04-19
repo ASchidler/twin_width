@@ -49,6 +49,9 @@ ap.add_argument("-v", dest="verbose", action="store_true", default=False,
                 help="Verbose mode.")
 ap.add_argument("-m", dest="memory", action="store", default=0, type=int,
                 help="Limit maximum memory usage in GB, useful to avoid memouts when testing.")
+ap.add_argument("-x", dest='maxsat', type=str, default=None, help="Export MaxSAT encoding to file.")
+ap.add_argument("-s", dest="sep_cards", action="store_true", default=False, help="Store cardinalities separately")
+
 
 args = ap.parse_args()
 
@@ -74,9 +77,11 @@ if instance.endswith(".cnf"):
         cb = treewidth.solve(g.to_undirected(), len(g.nodes) - 1, slv.Glucose3, True)[1]
     else:
         enc = encoding_signed_bipartite.TwinWidthEncoding()
-        cb = enc.run(g, slv.Cadical, ub)
+        cb = enc.run(g, slv.Cadical153, ub)
 else:
     g = parser.parse(args.instance)[0]
+    # g = grid_2d_graph(4, 4)
+    # g = tools.prime_paley(73)
 
     if len(g.nodes) == 1:
         print("Done, width: 0")
@@ -103,8 +108,11 @@ else:
                                            sb_static=0 if not args.contraction else args.contraction_limit,
                                            sb_static_full=args.contraction_full,
                                            cubic=2, sb_static_diff=args.contraction_diff, break_g_symmetry=True)
-
-    cb = enc.run(g, slv.Cadical, ub-1, verbose=args.verbose, write=True, steps_limit=40)
+    if args.maxsat is not None:
+        enc.wcnf_export(g, ub, args.maxsat, args.sep_cards)
+        exit(0)
+    else:
+        cb = enc.run(g, slv.Cadical153, ub-1, verbose=args.verbose, write=True, steps_limit=40)
 
 print(f"Finished")
 print(f"{cb}")

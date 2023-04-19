@@ -1,6 +1,8 @@
+import os
+
 from networkx import Graph
 from functools import cmp_to_key
-from pysat.formula import CNF, IDPool
+from pysat.formula import CNF, IDPool, WCNF
 from pysat.card import ITotalizer, CardEnc, EncType
 import tools
 import subprocess
@@ -76,7 +78,7 @@ class TwinWidthEncoding:
 
         return self.edge[n][j][i]
 
-    def encode(self, g, d, od, mg):
+    def encode(self, g, d, od, mg, skip_cards=False):
         g = self.remap_graph(g)
         n = len(g.nodes)
         self.init_var(g)
@@ -131,17 +133,18 @@ class TwinWidthEncoding:
         self.encode_reds2(g, formula, d)
 
         # Encode counters
-        self.totalizer = {}
-        for i in range(1, len(g.nodes)): # At last one is the root, no counter needed
-            self.totalizer[i] = {}
-            for x in range(1, len(g.nodes) + 1):
-                if i == x:
-                    continue
-                vars = [self.tedge(i, x, y) for y in range(1, len(g.nodes)+1) if x != y]
-                # TODO: store card vars to make it interchangable?
-                self.totalizer[i][x] = ITotalizer(vars, ubound=d, top_id=self.pool.id(f"totalizer{i}_{x}"))
-                formula.extend(self.totalizer[i][x].cnf)
-                self.pool.occupy(self.pool.top-1, self.totalizer[i][x].top_id)
+        if not skip_cards:
+            self.totalizer = {}
+            for i in range(1, len(g.nodes)): # At last one is the root, no counter needed
+                self.totalizer[i] = {}
+                for x in range(1, len(g.nodes) + 1):
+                    if i == x:
+                        continue
+                    vars = [self.tedge(i, x, y) for y in range(1, len(g.nodes)+1) if x != y]
+                    # TODO: store card vars to make it interchangable?
+                    self.totalizer[i][x] = ITotalizer(vars, ubound=d, top_id=self.pool.id(f"totalizer{i}_{x}"))
+                    formula.extend(self.totalizer[i][x].cnf)
+                    self.pool.occupy(self.pool.top-1, self.totalizer[i][x].top_id)
 
         self.sb_ord(n, formula)
         self.sb_reds(n, formula)
@@ -150,6 +153,32 @@ class TwinWidthEncoding:
             self.sb_reds(n, formula)
 
         return formula
+
+    def wcnf_export(self, g, start_bound, filename, export_cards):
+        formula = self.encode(g, start_bound, None, None)
+        wcnf = WCNF()
+        wcnf.extend(formula)
+
+        if not export_cards:
+            softs = [self.pool.id(f"softs_{i}") for i in range(1, start_bound+1)]
+            for cs in softs:
+                wcnf.append([-cs], 1)
+
+            for ctots in self.totalizer.values():
+                for ctot in ctots.values():
+                    for cd in range(0, start_bound):
+                        wcnf.append([-ctot.rhs[cd], softs[cd]])
+
+        wcnf.to_file(filename)
+        if export_cards:
+            with open(filename+".cards", "w") as outp:
+                for i in range(1, len(g.nodes)): # At last one is the root, no counter needed
+                    for x in range(1, len(g.nodes) + 1):
+                        if i == x:
+                            continue
+                        vars = [self.tedge(i, x, y) for y in range(1, len(g.nodes)+1) if x != y]
+                        outp.write(" ".join(str(x) for x in vars))
+                        outp.write(f" <= d"+ os.linesep)
 
     def run(self, g, solver, start_bound, verbose=True, check=True, lb=0, i_od=None, i_mg=None, steps_limit=None, write=False):
         start = time.time()

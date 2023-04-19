@@ -3,9 +3,10 @@ import time
 
 from networkx import Graph
 from pysat.card import CardEnc, EncType, ITotalizer
-from pysat.formula import CNF, IDPool
+from pysat.formula import CNF, IDPool, WCNF
 from threading import Timer
 import tools
+import os
 
 
 class TwinWidthEncoding2:
@@ -373,7 +374,7 @@ class TwinWidthEncoding2:
 
                     # self.formula.extend(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
 
-    def encode(self, g, d, od=None, mg=None, steps=None):
+    def encode(self, g, d, od=None, mg=None, steps=None, skip_cards=False):
         if steps is None:
             steps = len(g.nodes) - d
 
@@ -400,7 +401,9 @@ class TwinWidthEncoding2:
         self.encode_order(n, steps)
         self.encode_merge(n, steps)
         self.encode_red(n, g, steps)
-        self.encode_counters(g, d, steps)
+
+        if not skip_cards:
+            self.encode_counters(g, d, steps)
 
         if self.sb_ord:
             self.encode_sb_order(n, d, steps)
@@ -459,7 +462,36 @@ class TwinWidthEncoding2:
                             overall_clause.append(aux)
 
                         self.formula.append(overall_clause)
-    def run(self, g, solver, start_bound, verbose=True, check=True, lb = 0, timeout=0, i_od=None, i_mg=None, steps_limit=None, write=False):
+
+    def wcnf_export(self, g, start_bound, filename, export_cards):
+        formula = self.encode(g, start_bound, None, None, steps=len(g.nodes), skip_cards=export_cards)
+        wcnf = WCNF()
+        wcnf.extend(formula)
+
+        if not export_cards:
+            softs = [self.pool.id(f"softs_{i}") for i in range(1, start_bound+1)]
+            for cs in softs:
+                wcnf.append([-cs], 1)
+
+            for ct in self.cardvars:
+                for cn in ct:
+                    for cd in range(0, start_bound):
+                        wcnf.append([-cn[cd], softs[cd]])
+
+        wcnf.to_file(filename)
+        if export_cards:
+            with open(filename+".cards", "w") as outp:
+                for t in range(1, len(g.nodes)-1):  # As last one is the root, no counter needed
+                    # if self.cubic > 0 and t > 1:
+                    #     vars = [self.merged_edge[t][j] for j in range(1, len(g.nodes) + 1)]
+                    #     self.formula.extend(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
+
+                    for i in range(1, len(g.nodes) + 1):
+                        vars = [self.tred(t, i, j) for j in range(1, len(g.nodes) + 1) if i != j]
+                        outp.write(" ".join(str(x) for x in vars))
+                        outp.write(f" <= d" + os.linesep)
+
+    def run(self, g, solver, start_bound, verbose=True, check=True, lb=0, timeout=0, i_od=None, i_mg=None, steps_limit=None, write=False):
         start = time.time()
         cb = start_bound
         od = None
