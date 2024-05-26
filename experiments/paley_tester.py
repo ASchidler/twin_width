@@ -18,7 +18,7 @@ ub2 = heuristic.get_ub2(g)
 ub = min(ub, ub2)
 print(len(g.nodes))
 
-ub = 4
+ub = 36
 
 enc = encoding.TwinWidthEncoding(use_sb_static=False, use_sb_static_full=False)
 # enc = encoding2.TwinWidthEncoding2(g, cubic=2, sb_ord=False, sb_static=False, sb_static_full=False, is_grid=False)

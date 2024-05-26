@@ -1,54 +1,67 @@
 import sys
 
 from pysat.formula import CNF, IDPool
-from pysat.solvers import Cadical
+from pysat.solvers import Cadical153
 from pysat.card import CardEnc
 import networkx as nx
 import tools
 import subprocess
 
-red_deg = 3
-size = 6
+red_deg = 4
+size = 10
 depth = 1
+max_max_limit = size - 2
 
 pool = IDPool()
+
 def red(x, y):
     if x < y:
         return pool.id(f"red_{x}_{y}")
     else:
         return pool.id(f"red_{y}_{x}")
 
+
 def new_red(x, y, z1, z2):
     return pool.id(f"nred_{min(x, y)}_{max(x, y)}_{min(z1, z2)}_{max(z1,z2)}")
+
 
 def black(x, y):
     return pool.id(f"black_{min(x, y)}_{max(x, y)}")
 
+
 def c1(x, y, z):
     return pool.id(f"c1_{min(x, y)}_{max(x, y)}_{z}")
+
+
 def c2(x, y, z):
     return pool.id(f"c2_{min(x, y)}_{max(x, y)}_{z}")
 
 
-
-with Cadical() as slv:
+with Cadical153() as slv:
     def atmost_constr(cv, bnd):
         cid = pool.top
         exceeded = pool.id(f"{cid}_amo_exceeded")
 
+        if bnd < 0:
+            raise RuntimeError("Negative bound")
+
+        if bnd == 0:
+            for v in cv:
+                slv.add_clause([-v, exceeded])
+
+            return exceeded
+
         for i, v in enumerate(cv):
             slv.add_clause([-v, pool.id(f"{cid}_amo_{i}_1")])
 
-        for cb in range(1, bnd+1):
-            for i, v in enumerate(cv[1:]):
-                slv.add_clause([-pool.id(f"{cid}_amo_{i}_{cb}"), pool.id(f"{cid}_amo_{i+1}_{cb}")])
+            if i > 0:
+                slv.add_clause([-pool.id(f"{cid}_amo_{i}_{bnd}"), -v, exceeded])
 
-        for cb in range(2, bnd+1):
-            for i, v in enumerate(cv[1:]):
-                slv.add_clause([-pool.id(f"{cid}_amo_{i}_{cb-1}"), -v, pool.id(f"{cid}_amo_{i+1}_{cb}")])
+                for cb in range(1, bnd+1):
+                    slv.add_clause([-pool.id(f"{cid}_amo_{i-1}_{cb}"), pool.id(f"{cid}_amo_{i}_{cb}")])
 
-        for i, v in enumerate(cv[1:]):
-            slv.add_clause([-pool.id(f"{cid}_amo_{i}_{bnd}"), -v, exceeded])
+                    if cb > 1:
+                        slv.add_clause([-pool.id(f"{cid}_amo_{i-1}_{cb-1}"), -v, pool.id(f"{cid}_amo_{i}_{cb}")])
 
         return exceeded
 
@@ -60,12 +73,14 @@ with Cadical() as slv:
         if cd >= depth:
             cardvards = []
             for x in range(0, size):
-                if all(x != v for v in t1) and x == t2[-1]:
+                if all(x != v for v in t1):
                     cvars = [-pool.id(varname + f"_{min(x, z)}_{max(x, z)}") for z in range(0, size) if z != x and all(z != v for v in t1)]
-                    # exc = atmost_constr(cvars, size-red_deg-2)
-                    # cardvards.append(-exc)
-                    CardEnc.atleast([-x for x in cvars], bound=red_deg + 1, vpool=pool)
-            # slv.add_clause(cardvards)
+                    exc = atmost_constr(cvars, size-red_deg-2-depth)
+                    cardvards.append(-exc)
+                    # slv.append_formula(
+                    # CardEnc.atleast([-x for x in cvars], bound=red_deg + 1, vpool=pool)
+                    # )
+            slv.add_clause(cardvards)
 
             return
 
@@ -76,8 +91,8 @@ with Cadical() as slv:
             for y in range(x + 1, size):
                 if any(v == y for v in t1):
                     continue
-                slv.append_formula(
-                    CardEnc.atmost([pool.id(varname + f"_{z}") for z in range(0, size) if all(z != v for v in t1) and z != t2[-1]], bound=red_deg, vpool=pool))
+                # slv.append_formula(
+                #     CardEnc.atmost([pool.id(varname + f"_{z}") for z in range(0, size) if all(z != v for v in t1) and z != t2[-1]], bound=red_deg, vpool=pool))
 
                 for z in range(0, size):
                     if x == z or y == z or any(v == z for v in t1):
@@ -85,7 +100,7 @@ with Cadical() as slv:
 
                     oldvar1 = pool.id(varname + f"_{x}_{z}")
                     oldvar2 = pool.id(varname + f"_{y}_{z}")
-                    nvar = pool.id(varname + f"_{x}_{y}_{z}")
+                    nvar = pool.id(varname + f"_{x}_{y}_{y}_{z}")
 
                     slv.add_clause([-nvar, oldvar1, oldvar2, c1(x, y, z), c2(x, y, z)])
                     slv.add_clause([-oldvar1, nvar])
@@ -93,11 +108,17 @@ with Cadical() as slv:
                     slv.add_clause([-c1(x, y, z), nvar])
                     slv.add_clause([-c2(x, y, z), nvar])
 
+                    for a in range(z+1, size):
+                        if a == x or a == y or any(v == a for v in t1):
+                            continue
+
+                        slv.add_clause([-pool.id(varname + f"_{z}_{a}"), pool.id(varname + f"_{x}_{y}_{z}_{a}")])
+                        slv.add_clause([pool.id(varname + f"_{z}_{a}"), -pool.id(varname + f"_{x}_{y}_{z}_{a}")])
+
                 descend([*t1, x], [*t2, y], cd + 1)
 
-
     for n in range(0, size):
-        slv.append_formula(CardEnc.atmost([red(n2, n) for n2 in range(0, size) if n != n2], bound=red_deg, vpool=pool))
+        slv.append_formula(CardEnc.atmost([red(n2, n) for n2 in range(0, size) if n != n2], bound=red_deg if n < max_max_limit else red_deg-1, vpool=pool))
 
         for n2 in range(n+1, size):
             for n3 in range(0, size):
@@ -120,14 +141,13 @@ with Cadical() as slv:
                             slv.add_clause([-new_red(n, n2, n3, n4), red(n3, n4)])
                             slv.add_clause([-red(n3, n4), new_red(n, n2, n3, n4)])
 
-                    descend([n], [n2], 1)
-
                     # Break some symmetries
-                    for n4 in range(0, n3):
-                        if n4 != n and n4 != n2:
-                            slv.add_clause([red(n, n3), black(n, n3), red(n2, n4), black(n2, n4)])
-                            # slv.add_clause([-black(n, n3), red(n2, n4), black(n2, n4)])
+                    # for n4 in range(0, n3):
+                    #     if n4 != n and n4 != n2:
+                    #         slv.add_clause([red(n, n3), black(n, n3), red(n2, n4), black(n2, n4)])
+                    #         # slv.add_clause([-black(n, n3), red(n2, n4), black(n2, n4)])
 
+            descend([n], [n2], 1)
 
             # slv.append_formula(CardEnc.atleast([new_red(n, n2, n3) for n3 in range(0, size) if n != n3 and n2 != n3], bound=red_deg+1, vpool=pool))
 
@@ -135,6 +155,7 @@ with Cadical() as slv:
 
     import networkx as nx
     cnt = 0
+    print("Created")
     while result:
         result = slv.solve()
 
@@ -151,7 +172,7 @@ with Cadical() as slv:
             clause = []
 
             g = nx.Graph()
-
+            print(cnt)
             for n in range(0, size):
                 reds = 0
                 for n2 in range(0, size):
@@ -174,12 +195,12 @@ with Cadical() as slv:
             slv.add_clause(clause)
             print("")
 
-            # instance_name = f"structure_{red_deg}_{size}_{cnt}_{depth}"
-            #
-            # with open(f"{instance_name}.dot", "w") as f:
-            #     f.write(tools.dot_export(g, None, None, False))
-            # with open(f"{instance_name}.png", "w") as f:
-            #     subprocess.run(["circo", "-Tpng", f"{instance_name}.dot"], stdout=f)
-            #
-            # if cnt > 10:
-            #     exit(0)
+            instance_name = f"structure_{red_deg}_{size}_{cnt}_{depth}"
+
+            with open(f"{instance_name}.dot", "w") as f:
+                f.write(tools.dot_export(g, None, None, False))
+            with open(f"{instance_name}.png", "w") as f:
+                subprocess.run(["circo", "-Tpng", f"{instance_name}.dot"], stdout=f)
+
+            if cnt > 10:
+                exit(0)

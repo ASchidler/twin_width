@@ -2,15 +2,12 @@ import os
 import subprocess
 import sys
 import time
-from threading import Timer
 
-import networkx
-import networkx as nx
 import pysat.solvers as slv
 
 import encoding as encoding
 import encoding2 as encoding2
-import encoding3
+import encoding3 as encoding3
 import encoding_lazy2 as lazy2
 
 import encoding_signed_bipartite
@@ -18,8 +15,6 @@ import heuristic
 import parser
 import preprocessing
 import tools
-from networkx.generators.lattice import grid_2d_graph
-from networkx.generators.random_graphs import gnp_random_graph
 import resource
 import treewidth
 import argparse as argp
@@ -55,9 +50,7 @@ args = ap.parse_args()
 if args.memory > 0:
     resource.setrlimit(resource.RLIMIT_AS, (args.memory * 1024 * 1024 * 1024, args.memory * 1024 * 1024 * 1024))
 
-#print(f"{tools.solve_grid2(7,7, 3)}")
-
-instance = sys.argv[-1]
+instance = args.instance
 print(instance)
 issat = False
 
@@ -74,10 +67,9 @@ if instance.endswith(".cnf"):
         cb = treewidth.solve(g.to_undirected(), len(g.nodes) - 1, slv.Glucose3, True)[1]
     else:
         enc = encoding_signed_bipartite.TwinWidthEncoding()
-        cb = enc.run(g, slv.Cadical, ub)
+        cb = enc.run(g, slv.Cadical153, ub)
 else:
     g = parser.parse(args.instance)[0]
-
     if len(g.nodes) == 1:
         print("Done, width: 0")
         exit(0)
@@ -85,10 +77,8 @@ else:
     # TODO: Deal with disconnected?
     print(f"{len(g.nodes)} {len(g.edges)}")
     preprocessing.twin_merge(g)
-    ub = heuristic.get_ub(g)
-    ub2 = heuristic.get_ub2(g)
-    print(f"UB {ub} {ub2}")
-    ub = min(ub, ub2)
+    ub = heuristic.get_ub3(g)
+    print(f"UB {ub}")
 
     start = time.time()
     if args.encoding == 0:
@@ -104,7 +94,7 @@ else:
                                            sb_static_full=args.contraction_full,
                                            cubic=2, sb_static_diff=args.contraction_diff, break_g_symmetry=True)
 
-    cb = enc.run(g, slv.Cadical, ub-1, verbose=args.verbose, write=True, steps_limit=40)
+    cb = enc.run(g, slv.Cadical153, ub-1, verbose=args.verbose, write=True, steps_limit=None)
 
 print(f"Finished")
 print(f"{cb}")

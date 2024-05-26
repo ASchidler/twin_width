@@ -2,10 +2,10 @@ import sys
 
 from pysat.formula import IDPool, CNF
 import networkx.algorithms.clique as cq1
-import networkx.algorithms.approximation.clique as cq2
 from networkx import Graph, is_forest
 from pysat.card import ITotalizer
 import threading
+
 
 def _ord(i, j, pool):
     if i < j:

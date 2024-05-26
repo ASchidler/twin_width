@@ -465,8 +465,8 @@ class TwinWidthEncoding2:
                     # Create new edges
                     diff = differences[(i, j)]
                     for k in diff:
-                        # start = [-self.ord[t][i], -self.real_merge[i][j], self.tred(t, j, k), *[self.ord[t2][k] for t2 in range(1, t)]]
                         if t > 1:
+                            # start = [-self.ord[t][i], -self.real_merge[i][j], self.tred(t, j, k), *[self.ord[t2][k] for t2 in range(1, t)]]
                             start = [-self.ord_vars[i][t], self.ord_vars[j][t], self.ord_vars[k][t],
                                      -self.real_merge[i][j], self.tred(t, j, k)]
                         else:
@@ -552,8 +552,10 @@ class TwinWidthEncoding2:
 
                     # Maintain
                     for x in range(1, d + 1):
+                        # self.formula.append([self.merge[t][i], -self.counters[t - 1][i][x], aux_now, self.counters[t][i][x]])
                         self.formula.append([self.merge[t][i], -self.counters[t - 1][i][x], aux_source,
                                              self.counters[t][i][x]])
+
                         self.formula.append(
                             [self.merge[t][i], -self.counters[t - 1][i][x], aux_target, self.counters[t][i][x]])
 
@@ -749,15 +751,6 @@ class TwinWidthEncoding2:
                 formula = self.encode(g, i, i_od, i_mg, steps)
                 if write:
                     formula.to_file("test3.cnf")
-                # if os.path.exists("symmetries.txt"):
-                #     with open("symmetries.txt") as syminp:
-                #         for cl in syminp:
-                #             cl = cl.strip()
-                #             cl = [int(x) for x in cl.split(" ") if x != "0"]
-                #
-                #             cl2 = [("-" if x < 0 else "") + (self.pool.obj(abs(x)) if abs(x) <= self.pool.top else f"aux{x}") for x in cl]
-                #             print(cl2)
-                #             slv.add_clause(cl)
 
                 slv.append_formula(formula)
 
