@@ -152,28 +152,6 @@ class TwinWidthEncoding:
         if self.use_sb_red:
             self.sb_reds(n, formula)
 
-            if self.break_g_symmetry:
-                import pynauty
-
-                gn = pynauty.Graph(len(g.nodes))
-                for cn in g.nodes:
-                    gn.connect_vertex(cn - 1, [cb - 1 for cb in g.neighbors(cn)])
-                grp = pynauty.autgrp(gn)
-                orbits = grp[3]
-                seen = set()
-                clause = []
-                nodes = []
-                orbit_groups = [[] for _ in range(0, len(g.nodes))]
-
-                # The first eliminated vertex must be the smallest from each group
-                for cni, cn in enumerate(range(1, len(g.nodes) + 1)):
-                    orbit_groups[orbits[cni]].append(cn)
-                    if orbits[cni] not in seen:
-                        clause.append(self.ord[1][cn])
-                        nodes.append(cn)
-                        seen.add(orbits[cni])
-                self.formula.append(clause)
-
         return formula
 
     def wcnf_export(self, g, start_bound, filename, export_cards):
