@@ -5,7 +5,7 @@ from collections import defaultdict
 
 from networkx import Graph
 from pysat.card import CardEnc, EncType, ITotalizer
-from pysat.formula import CNF, IDPool
+from pysat.formula import CNF, IDPool, WCNF
 from threading import Timer
 import tools
 
@@ -594,6 +594,26 @@ class TwinWidthEncoding2:
                 self.pool.occupy(self.pool.top - 1, tot.top_id)
                 self.formula.append([-tot.rhs[d]])
                 self.cardvars[t] = list(tot.rhs)
+
+    def wcnf_export(self, g, start_bound, filename, export_cards):
+        formula = self.encode(g, start_bound+1, None, None, steps=len(g.nodes))
+        wcnf = WCNF() if not export_cards else CNF()
+        wcnf.extend(formula)
+
+        if not export_cards:
+            softs = [self.pool.id(f"softs_{i}") for i in range(1, start_bound+1)]
+            for cs in softs:
+                wcnf.append([-cs], 1)
+
+            for t in range(1, len(g.nodes)):
+                for i in range(1, len(g.nodes) + 1):
+                    for cd in range(1, start_bound + 1):
+                        wcnf.append([-self.counters[t][i][cd], softs[cd-1]])
+
+        wcnf.to_file(filename)
+        if export_cards:
+            raise RuntimeError("Cardinality export not supported for this encoding")
+
 
     def encode(self, g, d, od=None, mg=None, steps=None):
         if steps is None:

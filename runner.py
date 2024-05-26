@@ -44,6 +44,9 @@ ap.add_argument("-v", dest="verbose", action="store_true", default=False,
                 help="Verbose mode.")
 ap.add_argument("-m", dest="memory", action="store", default=0, type=int,
                 help="Limit maximum memory usage in GB, useful to avoid memouts when testing.")
+ap.add_argument("-j", dest='maxsat', type=str, default=None, help="Export MaxSAT encoding to file.")
+ap.add_argument("-p", dest="sep_cards", action="store_true", default=False, help="Store cardinalities separately")
+
 
 args = ap.parse_args()
 
@@ -70,6 +73,7 @@ if instance.endswith(".cnf"):
         cb = enc.run(g, slv.Cadical153, ub)
 else:
     g = parser.parse(args.instance)[0]
+
     if len(g.nodes) == 1:
         print("Done, width: 0")
         exit(0)
