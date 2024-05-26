@@ -10,7 +10,7 @@ import os
 
 
 class TwinWidthEncoding2:
-    def __init__(self, g, card_enc=EncType.mtotalizer, cubic=0, sb_ord=False, twohop=False, sb_static=sys.maxsize, sb_static_full=False, sb_static_diff=False, is_grid=False):
+    def __init__(self, g, card_enc=EncType.mtotalizer, cubic=0, sb_ord=False, twohop=False, sb_static=sys.maxsize, sb_static_full=False, sb_static_diff=False, break_g_symmetry=True):
         self.ord = None
         self.merge = None
         self.merged_edge = None
@@ -29,9 +29,9 @@ class TwinWidthEncoding2:
         self.sb_static_full = sb_static_full
         self.static_card = None
         self.sb_static_diff = sb_static_diff
-        self.is_grid = is_grid
         self.ord_vars = None
         self.real_merge = None
+        self.break_g_symmetry = break_g_symmetry
 
     def remap_graph(self, g):
         self.node_map = {}
@@ -413,9 +413,27 @@ class TwinWidthEncoding2:
         if self.sb_static > 0:
             self.encode_sb_static(n, d, g, steps)
 
-        if self.is_grid:
-            self.formula.append([self.ord[1][1]])
-            self.formula.append([self.merge[1][2], self.merge[1][5], self.merge[1][6]])
+        if self.break_g_symmetry:
+            import pynauty
+
+            gn = pynauty.Graph(len(g.nodes))
+            for cn in g.nodes:
+                gn.connect_vertex(cn - 1, [cb - 1 for cb in g.neighbors(cn)])
+            grp = pynauty.autgrp(gn)
+            orbits = grp[3]
+            seen = set()
+            clause = []
+            nodes = []
+            orbit_groups = [[] for _ in range(0, len(g.nodes))]
+
+            # The first eliminated vertex must be the smallest from each group
+            for cni, cn in enumerate(range(1, len(g.nodes)+1)):
+                orbit_groups[orbits[cni]].append(cn)
+                if orbits[cni] not in seen:
+                    clause.append(self.ord[1][cn])
+                    nodes.append(cn)
+                    seen.add(orbits[cni])
+            self.formula.append(clause)
 
         return self.formula
 

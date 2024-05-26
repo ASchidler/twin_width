@@ -1,3 +1,5 @@
+"""SAT encoding for treewidth by Samer and Veith."""
+
 import sys
 
 from pysat.formula import IDPool, CNF
