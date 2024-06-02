@@ -3,6 +3,7 @@ import subprocess
 import sys
 import time
 
+import networkx as nx
 import pysat.solvers as slv
 
 import encoding as encoding
@@ -71,45 +72,97 @@ if instance.endswith(".cnf"):
     else:
         enc = encoding_signed_bipartite.TwinWidthEncoding()
         cb = enc.run(g, slv.Cadical153, ub)
+
+    print(f"Finished")
+    print(f"{cb}")
 else:
     g = parser.parse(args.instance)[0]
 
     if len(g.nodes) == 1:
-        print("Done, width: 0")
+        print("Finished")
+        print("[0, [0], {}]")
         exit(0)
 
-    # TODO: Deal with disconnected?
+    eliminations = []
+    parents = {}
+    max_tww = None
+    single_nodes = []
+
     print(f"{len(g.nodes)} {len(g.edges)}")
-    preprocessing.twin_merge(g)
-    ub = heuristic.get_ub3(g)
-    print(f"UB {ub}")
+    twins = preprocessing.twin_merge(g)
+    for parent, child in twins:
+        eliminations.append(child)
+        parents[child] = parent
+
+    cub = heuristic.get_ub3(g)
+    print(f"UB {cub}")
 
     start = time.time()
-    if args.encoding == 0:
-        enc = encoding.TwinWidthEncoding(use_sb_static=args.contraction, use_sb_static_full=args.contraction_full)
-    elif args.encoding == 1:
-        enc = encoding2.TwinWidthEncoding2(g, sb_ord=args.order, sb_static=0 if not args.contraction else args.contraction_limit, sb_static_full=args.contraction_full,
-                                           cubic=2 if args.cubic else 0, sb_static_diff=args.contraction_diff)
-    elif args.encoding == 2:
-        enc = lazy2.TwinWidthEncoding2(g, sb_ord=args.order, sb_static=0 if not args.contraction else args.contraction_limit)
-    else:
-        enc = encoding3.TwinWidthEncoding2(g, sb_ord=args.order,
-                                           sb_static=0 if not args.contraction else args.contraction_limit,
-                                           sb_static_full=args.contraction_full,
-                                           cubic=2, sb_static_diff=args.contraction_diff, break_g_symmetry=True)
 
-    cb = enc.run(g, slv.Cadical153, ub-1, verbose=args.verbose, write=True, steps_limit=None)
+    comps = list(nx.connected_components(g))
 
-print(f"Finished")
-print(f"{cb}")
+    for cci, cc in enumerate(comps):
+        print(f"Component {cci} ({len(cc)} Nodes)")
+        if len(cc) == 1:
+            single_nodes.append(next(iter(cc)))
+        else:
+            cc = list(cc)
+            n_map = {x: i+1 for i, x in enumerate(cc)}
+            r_map = {i: x for x, i in n_map.items()}
+
+            ng = nx.Graph()
+            for n1, n2 in g.edges:
+                if n1 in n_map:
+                    ng.add_edge(n_map[n1], n_map[n2])
+
+            ub = heuristic.get_ub3(ng)
+
+            if args.encoding == 0:
+                enc = encoding.TwinWidthEncoding(use_sb_static=args.contraction, use_sb_static_full=args.contraction_full)
+            elif args.encoding == 1:
+                enc = encoding2.TwinWidthEncoding2(ng, sb_ord=args.order, sb_static=0 if not args.contraction else args.contraction_limit, sb_static_full=args.contraction_full,
+                                                   cubic=2 if args.cubic else 0, sb_static_diff=args.contraction_diff)
+            elif args.encoding == 2:
+                enc = lazy2.TwinWidthEncoding2(ng, sb_ord=args.order, sb_static=0 if not args.contraction else args.contraction_limit)
+            else:
+                enc = encoding3.TwinWidthEncoding2(ng, sb_ord=args.order,
+                                                   sb_static=0 if not args.contraction else args.contraction_limit,
+                                                   sb_static_full=args.contraction_full,
+                                                   cubic=2, sb_static_diff=args.contraction_diff, break_g_symmetry=True)
+
+            cb = enc.run(ng, slv.Cadical153, ub-1, verbose=args.verbose, write=True, steps_limit=None)
+
+            remaining = set(ng.nodes)
+            remaining -= set(cb[1])
+            remaining = list(remaining)
+            eliminations.extend([r_map[x] for x in cb[1]])
+
+            if len(remaining) >= 1:
+                for ck, cv in cb[2].items():
+                    parents[r_map[ck]] = r_map[cv]
+                for cn in remaining[:-1]:
+                    eliminations.append(r_map[cn])
+                    parents[r_map[cn]] = r_map[remaining[-1]]
+
+                single_nodes.append(r_map[remaining[-1]])
+
+            if max_tww is None or cb[0] > max_tww:
+                max_tww = cb[0]
+
+    for cn in single_nodes[:-1]:
+        eliminations.append(cn)
+        parents[cn] = single_nodes[-1]
+
+    print(f"Finished")
+    print(f"({max_tww}, {eliminations}, {parents})")
 
 if args.draw:
     instance_name = os.path.split(instance)[-1]
-    mg = cb[2]
+    mg = cb[2] if issat else parents
     for u, v in g.edges:
         g[u][v]["red"] = False
 
-    for i, n in enumerate(cb[1]):
+    for i, n in enumerate(cb[1] if issat else eliminations):
         if n not in mg:
             t = None
             n = None

@@ -4,18 +4,22 @@ import os
 from collections import defaultdict
 
 input = "logs/tww-pace.tar.bz2"
-instance_path = "/home/asc/Downloads/exact-public/exact-public/"
+instance_path = "/Users/andre/Downloads/exact-private/"
+
 
 class ExperimentResult:
     def __init__(self):
         self.tww = None
         self.runtime = None
         self.memory = None
+        self.best_tww = None
+
 
 class InstanceResult:
     def __init__(self, vertices: int, edges: int):
         self.vertices = vertices
         self.edges = edges
+
 
 experiments = set()
 results = defaultdict(lambda: defaultdict(ExperimentResult))
@@ -58,7 +62,13 @@ with tf.open(input) as ctf:
                 elif finished_seen and cln.strip().startswith("("):
                     cln = cln[1:-1]
                     results[instance][name_fields[0]].tww = int(cln.split(",")[0])
-
+                elif cln.strip().startswith("Found "):
+                    results[instance][name_fields[0]].best_tww = int(cln.split(" ")[1].strip())
+                # "Improved bound to 8"
+                # "Component n"
+                # "Found"
+                # "Running component with 8 vertices and 13 edges."
+                #TODO: Check that solved by bounds checks all components
             if only_line and only_field is not None:
                 results[instance][name_fields[0]].tww = only_field
 

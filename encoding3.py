@@ -145,7 +145,6 @@ class TwinWidthEncoding2:
         for t in range(2, steps):
             for i in range(1, n+1):
                 ord_dec[t][i] = self.pool.id(f"ord_dec_{t}_{i}")
-
                 clause = [-ord_dec[t][i]]
                 for cd in range(1, d+1):
                     aux_dec_s = self.pool.id(f"ord_dec_{t}_{i}_{cd}")
@@ -258,6 +257,7 @@ class TwinWidthEncoding2:
 
         ord_dec = [{} for _ in range(0, n + 1)]
 
+        # Did node i decrease its red degree at step t?
         for t in range(2, steps):
             for i in range(1, n + 1):
                 ord_dec[t][i] = self.pool.id(f"ord_dec_{t}_{i}")
@@ -278,7 +278,7 @@ class TwinWidthEncoding2:
                     self.formula.append([-self.counters[t - 1][i][cd], self.counters[t][i][cd], aux_dec_s])
                     self.formula.append([-aux_dec_s, self.counters[t - 1][i][cd]])
                     self.formula.append([-aux_dec_s, -self.counters[t][i][cd]])
-                    self.formula.append([-aux_dec_s, -self.ord_vars[i][t], ord_dec[t][i]])
+                    self.formula.append([-aux_dec_s, self.ord_vars[i][t], ord_dec[t][i]])
                     clause.append(aux_dec_s)
                 self.formula.append(clause)
                 self.formula.append([-ord_dec[t][i], -self.ord_vars[i][t]])
@@ -677,8 +677,8 @@ class TwinWidthEncoding2:
 
 
         if self.sb_ord:
-            # self.sb_ord2(n, d, g, steps)
-            self.encode_sb_order2(n, d, steps)
+            self.sb_ord2(n, d, g, steps)
+            # self.encode_sb_order2(n, d, steps)
         if self.twohop:
             self.sb_twohop(n, g, steps, True)
 

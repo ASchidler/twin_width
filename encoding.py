@@ -11,7 +11,7 @@ import time
 
 # TODO: Symmetry breaking: If two consecutive contractions have to node with red edges in common -> lex order
 class TwinWidthEncoding:
-    def __init__(self, use_sb_static=True, use_sb_static_full=True, use_sb_red=False):
+    def     __init__(self, use_sb_static=True, use_sb_static_full=True, use_sb_red=False):
         self.edge = None
         self.ord = None
         self.merge = None
@@ -29,6 +29,11 @@ class TwinWidthEncoding:
         cnt = 1
         gn = Graph()
 
+        for u in sorted(g.nodes):
+            self.node_map[u] = cnt
+            gn.add_node(cnt)
+            cnt += 1
+
         for u, v in sorted(g.edges()):
             if u not in self.node_map:
                 self.node_map[u] = cnt
@@ -41,7 +46,7 @@ class TwinWidthEncoding:
 
         return gn
 
-    def init_var(self, g):
+    def init_var(self, g, parts):
         self.edge = [[{} for _ in range(0, len(g.nodes) + 1)]  for _ in range(0, len(g.nodes) + 1)]
         self.ord = [{} for _ in range(0, len(g.nodes) + 1)]
         self.merge = [{} for _ in range(0, len(g.nodes) + 1)]
@@ -54,7 +59,9 @@ class TwinWidthEncoding:
                 for k in range(1, len(g.nodes) + 1):
                     self.edge[k][i][j] = self.pool.id(f"edge{k}_{i}_{j}")
                 self.ord[i][j] = self.pool.id(f"ord{i}_{j}")
-                self.merge[i][j] = self.pool.id(f"merge{i}_{j}")
+                if parts is None or j == len(g.nodes) + 1 or any(i in x and j in x for x in parts) or \
+                        (any(i == max(x) for x in parts) and any(j == max(x) for x in parts)):
+                    self.merge[i][j] = self.pool.id(f"merge{i}_{j}")
 
         if self.use_sb_static:
             for i in range(1, len(g.nodes) + 1):
@@ -78,18 +85,30 @@ class TwinWidthEncoding:
 
         return self.edge[n][j][i]
 
-    def encode(self, g, d, od, mg, skip_cards=False):
+    def encode(self, g, d, od, mg, skip_cards=False, parts=None):
         g = self.remap_graph(g)
         n = len(g.nodes)
-        self.init_var(g)
+        self.init_var(g, parts)
         formula = CNF()
+
+        if parts is not None:
+            maxes = {max(x) for x in parts}
+            for cn in range(1, len(g.nodes) + 1):
+                if cn not in maxes:
+                    for cm in maxes:
+                        formula.append([self.tord(cn, cm)])
+
         if od is not None:
-            done = set()
-            for cn in od:
-                done.add(cn)
-                for i in range(1, len(g.nodes) + 1):
-                    if i not in done and i != cn:
-                        formula.append([self.tord(cn, i)])
+            for i, cn in enumerate(od):
+                for cn2 in od[i+1:]:
+                    formula.append([self.tord(cn, cn2)])
+
+            # done = set()
+            # for cn in od:
+            #     done.add(cn)
+            #     for i in range(1, len(g.nodes) + 1):
+            #         if i not in done and i != cn:
+            #             formula.append([self.tord(cn, i)])
 
         if mg is not None:
             for k, v in mg.items():
@@ -110,17 +129,24 @@ class TwinWidthEncoding:
         # Merge/ord relationship
         for i in range(1, len(g.nodes) + 1):            
             for j in range(i+1, len(g.nodes) + 1):
-                formula.append([-self.merge[i][j], self.tord(i, j)])
+                if j in self.merge[i]:
+                    formula.append([-self.merge[i][j], self.tord(i, j)])
                 
         # single merge target
         for i in range(1, len(g.nodes)):
-            formula.extend(CardEnc.atleast([self.merge[i][j] for j in range(i + 1, len(g.nodes) + 1)], bound=1, vpool=self.pool))
-            formula.extend(CardEnc.atmost([self.merge[i][j] for j in range(i + 1, len(g.nodes) + 1)], bound=1, vpool=self.pool))
+            formula.extend(
+                CardEnc.atleast([self.merge[i][j] for j in range(i + 1, len(g.nodes) + 1) if j in self.merge[i]],
+                                bound=1, vpool=self.pool))
+            if len(self.merge[i]) > 1:
+                formula.extend(CardEnc.atmost([self.merge[i][j] for j in range(i + 1, len(g.nodes) + 1) if j in self.merge[i]], bound=1, vpool=self.pool))
 
         # Create red arcs
         for i in range(1, len(g.nodes) + 1):
             inb = set(g.neighbors(i))
             for j in range(i+1, len(g.nodes) + 1):
+                if j not in self.merge[i]:
+                    continue
+
                 jnb = set(g.neighbors(j))
                 jnb.discard(i)
                 diff = jnb ^ inb  # Symmetric difference
@@ -180,9 +206,9 @@ class TwinWidthEncoding:
                         outp.write(" ".join(str(x) for x in vars))
                         outp.write(f" <= d"+ os.linesep)
 
-    def run(self, g, solver, start_bound, verbose=True, check=True, lb=0, i_od=None, i_mg=None, steps_limit=None, write=False):
+    def run(self, g, solver, start_bound, verbose=True, check=True, lb=0, i_od=None, i_mg=None, steps_limit=None, write=False, parts=None):
         start = time.time()
-        formula = self.encode(g, start_bound, i_od, i_mg)
+        formula = self.encode(g, start_bound, i_od, i_mg, parts=parts)
         cb = start_bound
 
         if verbose:
@@ -205,7 +231,8 @@ class TwinWidthEncoding:
                 if self.use_sb_static and self.use_sb_static_full:
                     for n1, vl in enumerate(self.static_cards):
                         for n2, cards in vl.items():
-                            slv.add_clause([-self.merge[n1][n2], -cards[i]])
+                            if n2 in self.merge[n1]:
+                                slv.add_clause([-self.merge[n1][n2], -cards[i]])
 
                 if slv.solve():
                     if verbose:
@@ -283,7 +310,7 @@ class TwinWidthEncoding:
         # Transfer red arcs
         for i in range(1, len(g.nodes) + 1):
             for j in range(i + 1, len(g.nodes) + 1):
-                if i == j:
+                if i == j or j not in self.merge[i]:
                     continue
 
                 for k in range(1, len(g.nodes) + 1):
@@ -329,13 +356,14 @@ class TwinWidthEncoding:
                         #
                         # self.static_cards[i][j] = cards
                     elif old_d is None or len(sd) <= old_d:
-                        cl = [-self.merge[i][j]]
-                        for x in sd:
-                            cl.append(self.tord(x, i))
-                        if slv is None:
-                            form.append(cl)
-                        else:
-                            slv.add_clause(cl)
+                        if j in self.merge[i]:
+                            cl = [-self.merge[i][j]]
+                            for x in sd:
+                                cl.append(self.tord(x, i))
+                            if slv is None:
+                                form.append(cl)
+                            else:
+                                slv.add_clause(cl)
 
     def decode(self, model, g, d, verbose=False):
         g = g.copy()
@@ -356,7 +384,7 @@ class TwinWidthEncoding:
 
         for i in range(1, len(g.nodes) + 1):
             for j in range(i+1, len(g.nodes) + 1):
-                if model[self.merge[i][j]]:
+                if j in self.merge[i] and model[self.merge[i][j]]:
                     if i in mg:
                         print("Error, double merge!")
                     mg[i] = j

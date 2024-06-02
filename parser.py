@@ -1,8 +1,20 @@
+import lzma
+
 import networkx as nx
 import bz2
 
 
 def parse(path):
+    if path.endswith(".xz"):
+        edges = []
+        with lzma.open(path) as inp:
+            for i, cl in enumerate(inp):
+                cl = cl.decode("ascii")
+                if not cl.startswith("p ") and not cl.startswith("c "):
+                    edges.append([int(x) for x in cl.strip().split()])
+        return nx.from_edgelist(edges), set()
+
+
     if path.lower().endswith(".bz2"):
         f = bz2.open(path, mode='rb')
     else:

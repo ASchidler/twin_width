@@ -5,7 +5,7 @@ from threading import Timer
 
 import parser
 import subprocess
-from pysat.solvers import Cadical, Glucose4
+from pysat.solvers import Cadical153, Glucose4
 
 instance = sys.argv[1]
 print(os.path.split(instance)[-1])
