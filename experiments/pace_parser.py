@@ -3,7 +3,7 @@ import tarfile as tf
 import os
 from collections import defaultdict
 
-input = "logs/tww-pace.tar.bz2"
+input = "logs/tww-twlib.tar.bz2"
 instance_path = "/Users/andre/Downloads/exact-private/"
 
 
@@ -61,8 +61,15 @@ with tf.open(input) as ctf:
                     finished_seen = True
                 elif finished_seen and cln.strip().startswith("("):
                     cln = cln[1:-1]
-                    results[instance][name_fields[0]].tww = int(cln.split(",")[0])
-                elif cln.strip().startswith("Found "):
+                    # Dirty fix for wrong output
+                    if instance == 200:
+                        cln = cln[cln.index(",")+1:cln.index("]")]
+                        cfs = cln.split(",")
+                        if len(cfs) == 19999:
+                            results[instance][name_fields[0]].tww = 0
+                    else:
+                        results[instance][name_fields[0]].tww = int(cln.split(",")[0])
+                elif cln.strip().startswith("Found ") and not cln.strip().startswith("Found subgraph"):
                     results[instance][name_fields[0]].best_tww = int(cln.split(" ")[1].strip())
                 # "Improved bound to 8"
                 # "Component n"

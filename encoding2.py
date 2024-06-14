@@ -215,6 +215,45 @@ class TwinWidthEncoding2:
                     for t2 in range(max(1, t - max_diff), t):
                         self.formula.append([-self.ord[t2][j], -self.ord[t][i], self.pool.id(f"gap_ok_{t}_{t2}")])
 
+    def sb_ord2(self, n, d, g, steps):
+        """Enforce lex ordering whenever there is no node that reaches the bound at time t"""
+        if d == 0:
+            return
+
+        ord_dec = [{} for _ in range(0, n + 1)]
+
+        for t in range(3, steps):
+            for i in range(1, n + 1):
+                ord_dec[t][i] = self.pool.id(f"ord_dec_{t}_{i}")
+
+                for cd in range(1, d+1):
+                    aux = self.pool.id(f"ord_dec_{t}_{i}_{cd}")
+                    if cd < d:
+                        self.formula.append([-self.merge[t][i], -self.cardvars[t-2][i-1][cd], self.cardvars[t-1][i-1][cd], -self.cardvars[t][i-1][d], self.ord_vars[i][t], ord_dec[t][i]])
+                        # self.formula.append([-self.merge[t][i], -self.counters[t - 2][i][cd], self.counters[t - 1][i][cd], -self.counters[t][i][d], ord_dec[t][i]])
+                    else:
+                        self.formula.append([-self.cardvars[t - 2][i-1][cd], self.cardvars[t - 1][i-1][cd], -self.cardvars[t][i-1][d], self.ord_vars[i][t], ord_dec[t][i]])
+                        # self.formula.append([-self.counters[t - 2][i][cd], self.counters[t - 1][i][cd], -self.counters[t][i][d], ord_dec[t][i]])
+
+                    self.formula.append([-self.cardvars[t - 2][i-1][cd], self.cardvars[t-1][i-1][cd], self.ord_vars[i][t], aux])
+                    # self.formula.append([-self.counters[t - 2][i][cd], self.counters[t - 1][i][cd], aux])
+                    self.formula.append([-aux, self.cardvars[t-2][i-1][cd]])
+                    self.formula.append([-aux, -self.cardvars[t-1][i-1][cd]])
+                    self.formula.append([-aux, -self.ord_vars[i][t]])
+                    self.formula.append([-ord_dec[t][i], -self.merge[t][i], -self.cardvars[t-2][i-1][cd], self.ord_vars[i][t], -self.cardvars[t-1][i-1][cd]])
+                    # self.formula.append([-ord_dec[t][i], -self.merge[t][i], -self.counters[t-2][i][cd], -self.counters[t-1][i][cd]])
+
+                self.formula.append([-ord_dec[t][i], self.cardvars[t][i-1][d]])
+                self.formula.append([-ord_dec[t][i], self.cardvars[t-2][i-1][1]])
+                self.formula.append([-ord_dec[t][i], -self.ord_vars[i][t]])
+                self.formula.append([-ord_dec[t][i], self.merge[t][i], self.cardvars[t - 2][i-1][d]])
+                self.formula.append([-ord_dec[t][i], self.merge[t][i], -self.cardvars[t - 1][i-1][d]])
+
+        for t in range(2, steps-1):
+            for j in range(t+1, n+1):
+                for i in range(1, j):
+                    self.formula.append([-self.ord[t+1][i], -self.ord[t][j], *[ord_dec[t+1][k] for k in range(1, n+1)]])
+
     def encode_sb_static(self, n, d, g, steps):
         for n1 in range(1, n+1):
             n1nb = set(g.neighbors(n1))
@@ -406,7 +445,7 @@ class TwinWidthEncoding2:
             self.encode_counters(g, d, steps)
 
         if self.sb_ord:
-            self.encode_sb_order(n, d, steps)
+            self.sb_ord2(n, d, g, steps)
         if self.twohop:
             self.sb_twohop(n, g, steps, True)
 
