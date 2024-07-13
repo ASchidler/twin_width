@@ -155,10 +155,10 @@ class TwinWidthEncoding2:
             for i in range(1, n + 1):
                 ord_dec[t][i] = self.pool.id(f"ord_dec_{t}_{i}")
             #
-                for cd in range(1, d):
-                    if cd < d-1:
+                for cd in range(1, d+1):
+                    if cd < d:
                         # pass
-                        self.formula.append([-self.merge[t][i], -self.cardvars[t-2][i-1][cd], self.cardvars[t-1][i-1][cd], -self.cardvars[t][i-1][d], self.ord_vars[i][t], ord_dec[t][i]])
+                        self.formula.append([-self.merge[t][i], -self.cardvars[t-2][i-1][cd], self.cardvars[t-1][i-1][cd], -self.cardvars[t][i-1][d-1], self.ord_vars[i][t], ord_dec[t][i]])
                     else:
                         self.formula.append([-self.cardvars[t - 2][i-1][d-1], self.cardvars[t - 1][i-1][d-1], -self.cardvars[t][i-1][d-1], self.ord_vars[i][t], ord_dec[t][i]])
 
@@ -173,6 +173,10 @@ class TwinWidthEncoding2:
             for j in range(1, n+1):
                 for i in range(1, j):
                     self.formula.append([-self.ord[t+1][i], -self.ord[t][j], *[ord_dec[t+1][k] for k in range(1, n+1)]])
+
+        for j in range(1, n + 1):
+            for i in range(1, j):
+                self.formula.append([-self.ord[2][i], -self.ord[1][j], *[self.cardvars[2][k-1][d-1] for k in range(1, n+1)]])
 
     def encode_sb_static(self, n, d, g, steps):
         for n1 in range(1, n+1):
@@ -531,10 +535,11 @@ class TwinWidthEncoding2:
         c_max = 0
         step = 1
         for n in od:
+            if verbose:
+                print(f"{n} => {mg[n]}")
             t = unmap[mg[n]]
             n = unmap[n]
-            if verbose:
-                print(f"{n} => {t}")
+
             tn = set(g.neighbors(t))
             tn.discard(n)
             nn = set(g.neighbors(n))
