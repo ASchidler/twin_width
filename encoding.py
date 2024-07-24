@@ -11,7 +11,7 @@ import time
 
 # TODO: Symmetry breaking: If two consecutive contractions have to node with red edges in common -> lex order
 class TwinWidthEncoding:
-    def     __init__(self, use_sb_static=True, use_sb_static_full=True, use_sb_red=False):
+    def     __init__(self, use_sb_static=True, use_sb_static_full=True, use_sb_red=True):
         self.edge = None
         self.ord = None
         self.merge = None
@@ -85,7 +85,7 @@ class TwinWidthEncoding:
 
         return self.edge[n][j][i]
 
-    def encode(self, g, d, od, mg, skip_cards=False, parts=None):
+    def encode(self, g, d, od, mg, skip_cards=False, parts=None, reds=None):
         g = self.remap_graph(g)
         n = len(g.nodes)
         self.init_var(g, parts)
@@ -153,10 +153,24 @@ class TwinWidthEncoding:
                 diff.discard(j)
 
                 for k in diff:
-                    # TODO: On dense graphs one could use the complementary graph...
                     formula.append([-self.merge[i][j], -self.tord(i, k), self.tedge(i, j, k)])
 
         self.encode_reds2(g, formula, d)
+
+        if reds is not None:
+            for i in range(1, len(g.nodes) + 1):
+                for j, k in reds:
+                    j = self.node_map[j]
+                    k = self.node_map[k]
+
+                    if i != j and i != k:
+                        formula.append([-self.tord(i, j), -self.tord(i, k), self.tedge(i, j, k)])
+            for j, k in reds:
+                j = self.node_map[j]
+                k = self.node_map[k]
+                assert f"a_red{j}_{k}" in self.pool.obj2id and f"a_red{k}_{j}" in self.pool.obj2id
+                formula.append([-self.tord(j, k), self.pool.id(f"a_red{j}_{k}")])
+                formula.append([-self.tord(k, j), self.pool.id(f"a_red{k}_{j}")])
 
         # Encode counters
         if not skip_cards:
@@ -167,14 +181,14 @@ class TwinWidthEncoding:
                     if i == x:
                         continue
                     vars = [self.tedge(i, x, y) for y in range(1, len(g.nodes)+1) if x != y]
-                    # TODO: store card vars to make it interchangable?
+
                     self.totalizer[i][x] = ITotalizer(vars, ubound=d, top_id=self.pool.id(f"totalizer{i}_{x}"))
                     formula.extend(self.totalizer[i][x].cnf)
                     self.pool.occupy(self.pool.top-1, self.totalizer[i][x].top_id)
 
         self.sb_ord(n, formula)
-        self.sb_reds(n, formula)
-        self.sb_static(d, formula)
+        if self.sb_static(d, formula):
+            self.sb_static(d, formula)
         if self.use_sb_red:
             self.sb_reds(n, formula)
 
@@ -206,9 +220,9 @@ class TwinWidthEncoding:
                         outp.write(" ".join(str(x) for x in vars))
                         outp.write(f" <= d"+ os.linesep)
 
-    def run(self, g, solver, start_bound, verbose=True, check=True, lb=0, i_od=None, i_mg=None, steps_limit=None, write=False, parts=None):
+    def run(self, g, solver, start_bound, verbose=True, check=True, lb=0, i_od=None, i_mg=None, write=False, parts=None, reds=None):
         start = time.time()
-        formula = self.encode(g, start_bound, i_od, i_mg, parts=parts)
+        formula = self.encode(g, start_bound, i_od, i_mg, parts=parts, reds=reds)
         cb = start_bound
 
         if verbose:
@@ -365,7 +379,7 @@ class TwinWidthEncoding:
                             else:
                                 slv.add_clause(cl)
 
-    def decode(self, model, g, d, verbose=False):
+    def decode(self, model, g, d, verbose=False, reds=None):
         g = g.copy()
         model = {abs(x): x > 0 for x in model}
         unmap = {}
@@ -395,24 +409,17 @@ class TwinWidthEncoding:
         for u, v in g.edges:
             g[u][v]['red'] = False
 
+        if reds is not None:
+            for u, v in reds:
+                g.add_edge(u, v, red=True)
+
         c_max = 0
         cnt = 0
-        for n in od[:-1]:
+        for c_step, n in enumerate(od[:-1]):
             t = unmap[mg[n]]
             n = unmap[n]
             if verbose:
                 print(f"{n} => {t}")
-            # graph_export, line_export = tools.dot_export(g, t, n)
-            # with open(f"progress_{cnt}.dot", "w") as f:
-            #     f.write(graph_export)
-            # with open(f"progress_{cnt}.png", "w") as f:
-            #     subprocess.run(["dot", "-Kfdp", "-Tpng", f"progress_{cnt}.dot"], stdout=f)
-
-            # with open(f"line_{cnt}.dot", "w") as f:
-            #     f.write(line_export)
-            # with open(f"line_{cnt}.png", "w") as f:
-            #     subprocess.run(["dot", "-Tpng", f"line_{cnt}.dot"], stdout=f)
-
 
             tn = set(g.neighbors(t))
             tn.discard(n)
@@ -420,12 +427,8 @@ class TwinWidthEncoding:
 
             for v in nn:
                 if v != t:
-                    # Red remains, should edge exist
-                    if v in tn and g[n][v]['red']:
-                        g[t][v]['red'] = True
-                    # Add non-existing edges
-                    if v not in tn:
-                        g.add_edge(t, v, red=True)
+                    g.add_edge(t, v, red=v not in tn)
+
             for v in tn:
                 if v not in nn:
                     g[t][v]['red'] = True
@@ -436,12 +439,12 @@ class TwinWidthEncoding:
                 cc = 0
                 for v in g.neighbors(u):
                     if g[u][v]['red']:
+                        assert model[self.tedge(od[c_step], u, v)]
                         cc += 1
                 c_max = max(c_max, cc)
+                if c_max > d:
+                    print(f"Error: Bound exceeded {c_max}/{d}, Step {c_step+1}, Node {u}")
+
             cnt += 1
-        #print(f"Done {c_max}/{d}")
-        # od = [unmap[x] for x in od]
-        # mg = {unmap[x]: unmap[y] for x, y in mg.items()}
-        if c_max > d:
-            print(f"Error: Bound exceeded {c_max}/{d}")
+
         return c_max, od, mg

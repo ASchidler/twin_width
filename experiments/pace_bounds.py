@@ -4,8 +4,11 @@ import os
 from collections import defaultdict
 
 input = "logs/tww-pace.tar.bz2"
-instance_path = "/Users/andre/Downloads/exact-private/"
 results_path = "tww-pace.csv"
+
+# input = "logs/tww-twlib.tar.bz2"
+# results_path = "tww-twlib.csv"
+
 import numpy as np
 import scipy.stats as st
 
@@ -60,6 +63,7 @@ with tf.open(input) as ctf:
         only_field = None
         finished_seen = False
         time_seen = False
+        missing_ub = False
 
         for i, cln in enumerate(cetf):
             cln = cln.decode('ascii').strip()
@@ -79,8 +83,13 @@ with tf.open(input) as ctf:
                     results[instance].lbs[lb_name] = new_lb
             elif cln.strip().startswith("UB"):
                 new_ub = int(cln.split(":")[-1].strip())
-                if results[instance].ub is None or results[instance].ub > new_ub:
+                missing_ub = False
+                if results[instance].ub is None or results[instance].ub < new_ub:
                     results[instance].ub = new_ub
+            elif cln.strip().startswith("Running component with"):
+                missing_ub = True
+        if missing_ub:
+            results[instance].ub = None
 
 
 class AggregateResult:

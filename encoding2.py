@@ -34,18 +34,12 @@ class TwinWidthEncoding2:
         self.break_g_symmetry = break_g_symmetry
 
     def remap_graph(self, g):
-        self.node_map = {}
-        cnt = 1
+        self.node_map = {cn: ci + 1 for ci, cn in enumerate(sorted(g.nodes))}
         gn = Graph()
 
+        for cn in self.node_map.values():
+            gn.add_node(cn)
         for u, v in sorted(g.edges()):
-            if u not in self.node_map:
-                self.node_map[u] = cnt
-                cnt += 1
-            if v not in self.node_map:
-                self.node_map[v] = cnt
-                cnt += 1
-
             gn.add_edge(self.node_map[u], self.node_map[v])
 
         return gn
@@ -331,7 +325,7 @@ class TwinWidthEncoding2:
 
                     # self.formula.extend(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
 
-    def encode(self, g, d, od=None, mg=None, steps=None, skip_cards=False):
+    def encode(self, g, d, od=None, mg=None, steps=None, skip_cards=False, reds=None):
         if steps is None:
             steps = len(g.nodes) - d
 
@@ -389,6 +383,20 @@ class TwinWidthEncoding2:
                     nodes.append(cn)
                     seen.add(orbits[cni])
             self.formula.append(clause)
+
+        if reds is not None:
+            for cr1, cr2 in reds:
+                cr1 = self.node_map[cr1]
+                cr2 = self.node_map[cr2]
+                self.formula.append([self.ord[1][cr1], self.ord[1][cr2], self.tred(1, cr1, cr2)])
+                for cn in g.nodes:
+                    if cn != cr1 and cn != cr2:
+                        if self.cubic > 0:
+                            self.formula.append([-self.ord[1][cr1], -self.merge[1][cn], self.tred(1, cr2, cn)])
+                            self.formula.append([-self.ord[1][cr2], -self.merge[1][cn], self.tred(1, cr1, cn)])
+                        else:
+                            self.formula.append([-self.ord[1][cr1], -self.merge[cr1][cn], self.tred(1, cr2, cn)])
+                            self.formula.append([-self.ord[1][cr2], -self.merge[cr2][cn], self.tred(1, cr1, cn)])
 
         return self.formula
 

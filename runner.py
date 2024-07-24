@@ -71,7 +71,7 @@ if instance.endswith(".cnf"):
         cb = treewidth.solve(g.to_undirected(), len(g.nodes) - 1, slv.Glucose3, True)[1]
     else:
         enc = encoding_signed_bipartite.TwinWidthEncoding()
-        cb = enc.run(g, slv.Cadical153, ub)
+        cb = enc.run(g, slv.Cadical195, ub)
 
     print(f"Finished")
     print(f"{cb}")
@@ -121,7 +121,7 @@ else:
                 enc = encoding.TwinWidthEncoding(use_sb_static=args.contraction, use_sb_static_full=args.contraction_full)
             elif args.encoding == 1:
                 enc = encoding2.TwinWidthEncoding2(ng, sb_ord=args.order, sb_static=0 if not args.contraction else args.contraction_limit, sb_static_full=args.contraction_full,
-                                                   cubic=2 if args.cubic else 0, sb_static_diff=args.contraction_diff)
+                                                   cubic=2 if args.cubic else 0, sb_static_diff=args.contraction_diff, break_g_symmetry=True)
             elif args.encoding == 2:
                 enc = lazy2.TwinWidthEncoding2(ng, sb_ord=args.order, sb_static=0 if not args.contraction else args.contraction_limit)
             else:
@@ -130,7 +130,7 @@ else:
                                                    sb_static_full=args.contraction_full,
                                                    cubic=2, sb_static_diff=args.contraction_diff, break_g_symmetry=True)
 
-            cb = enc.run(ng, slv.Cadical153, ub-1, verbose=args.verbose, write=True, steps_limit=None)
+            cb = enc.run(ng, slv.Cadical195, ub, verbose=args.verbose, write=True, steps_limit=None)
 
             remaining = set(ng.nodes)
             remaining -= set(cb[1])
