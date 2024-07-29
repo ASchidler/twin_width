@@ -32,6 +32,7 @@ class TwinWidthEncoding2:
         self.ord_vars = None
         self.real_merge = None
         self.break_g_symmetry = break_g_symmetry
+        self.conditional_steps = None
 
     def remap_graph(self, g):
         self.node_map = {cn: ci + 1 for ci, cn in enumerate(sorted(g.nodes))}
@@ -44,7 +45,7 @@ class TwinWidthEncoding2:
 
         return gn
 
-    def init_var(self, g, steps):
+    def init_var(self, g, steps, conditional_steps):
         self.red = [[{} for _ in range(0, len(g.nodes) + 1)] for _ in range(0, len(g.nodes) + 1)]
         self.ord = [{} for _ in range(0, len(g.nodes) + 1)]
         self.merge = [{} for _ in range(0, len(g.nodes) + 1)]
@@ -52,6 +53,9 @@ class TwinWidthEncoding2:
         self.cardvars = [[] for _ in range(0, len(g.nodes) + 1)]
         self.static_card = [{} for _ in range(0, len(g.nodes) + 1)]
         self.real_merge = [{} for _ in range(0, len(g.nodes) + 1)]
+
+        if conditional_steps:
+            self.conditional_steps = [None for _ in range(0, steps)]
 
         if self.cubic < 2:
             for i in range(1, len(g.nodes)+1):
@@ -73,6 +77,9 @@ class TwinWidthEncoding2:
                     self.merged_edge[t][j] = self.pool.id(f"me{t}_{j}")
 
         for t in range(1, steps):
+            if conditional_steps:
+                self.conditional_steps[t] = self.pool.id(f"steps_{t}")
+
             for i in range(1, len(g.nodes) + 1):
                 self.ord[t][i] = self.pool.id(f"ord{t}_{i}")
 
@@ -84,9 +91,15 @@ class TwinWidthEncoding2:
         for t in range(1, steps):
             if t < n:
                 self.formula.append([-self.ord[t][n]])
-            self.formula.extend(
-                CardEnc.atmost([self.ord[t][i] for i in range(1, n+1)], bound=1, vpool=self.pool))
-            self.formula.append([self.ord[t][i] for i in range(1, n + 1)])
+            self.formula.extend(CardEnc.atmost([self.ord[t][i] for i in range(1, n+1)], bound=1, vpool=self.pool))
+
+            if self.conditional_steps is None:
+                self.formula.append([self.ord[t][i] for i in range(1, n + 1)])
+            else:
+                self.formula.append([-self.conditional_steps[t], *[self.ord[t][i] for i in range(1, n + 1)]])
+                for co in self.ord[t].values():
+                    if co is not None:
+                        self.formula.append([self.conditional_steps[t], -co])
 
         # Make sure each node is assigned only once...
         for i in range(1, n + 1):
@@ -116,7 +129,13 @@ class TwinWidthEncoding2:
             for t in range(1, steps):
                 self.formula.extend(
                     CardEnc.atmost([self.merge[t][j] for j in range(1, n + 1)], bound=1, vpool=self.pool))
-                self.formula.append([self.merge[t][j] for j in range(1, n + 1)])
+                if self.conditional_steps is None:
+                    self.formula.append([self.merge[t][j] for j in range(1, n + 1)])
+                else:
+                    self.formula.append([-self.conditional_steps[t], *[self.merge[t][j] for j in range(1, n + 1)]])
+                    for cm in self.merge[t].values():
+                        if cm is not None:
+                            self.formula.append([self.conditional_steps[t], -cm])
 
                 for i in range(1, n+1):
                     # Do not merge with yourself or if already eliminated
@@ -259,22 +278,13 @@ class TwinWidthEncoding2:
                             for t2 in range(1, t):
                                 start.append(self.ord[t2][k])
                         else:
-                            # start = [-self.ord[t][i], -self.real_merge[i][j], self.tred(t, j, k), *[self.ord[t2][k] for t2 in range(1, t)]]
                             if t > 1:
                                 start = [-self.ord_vars[i][t], self.ord_vars[j][t], self.ord_vars[k][t],
                                          -self.real_merge[i][j], self.tred(t, j, k)]
+                                self.formula.append(start)
                             else:
                                 start = [-self.ord[t][i], -self.real_merge[i][j], self.tred(t, j, k)]
-
-                            # start = [-self.ord[t][i], -self.merge[t][j], self.tred(t, j, k)]
-                        self.formula.append(start)
-
-                    # if self.sb_ord and i < j and self.cubic == 2:
-                    #     for k in set(range(1, n+1)) - diff - {i, j}:
-                    #         if t > 1:
-                    #             self.formula.append([-self.merge[t][j], -self.ord[t][i], self.tred(t-1, j, k), self.tred(t-1, i, k), -self.tred(t, j, k)])
-                    #         else:
-                    #             self.formula.append([-self.merge[t][j], -self.ord[t][i], -self.tred(t, j, k)])
+                                self.formula.append(start)
 
                     # Transfer from merge source to merge target
                     if self.cubic == 0 and t > 1:
@@ -298,7 +308,7 @@ class TwinWidthEncoding2:
                             continue
                         if i < j:
                             self.formula.append([self.ord[t][i], self.ord[t][j], -self.tred(t - 1, i, j), self.tred(t, i, j)])
-                        
+
                         if self.cubic == 2:
                             self.formula.append([-self.merge[t][i], -self.merged_edge[t][j], self.tred(t, i, j)])
 
@@ -325,7 +335,7 @@ class TwinWidthEncoding2:
 
                     # self.formula.extend(CardEnc.atmost(vars, bound=d, vpool=self.pool, encoding=self.card_enc))
 
-    def encode(self, g, d, od=None, mg=None, steps=None, skip_cards=False, reds=None):
+    def encode(self, g, d, od=None, mg=None, steps=None, skip_cards=False, reds=None, conditional_steps=False):
         if steps is None:
             steps = len(g.nodes) - d
 
@@ -333,7 +343,7 @@ class TwinWidthEncoding2:
         n = len(g.nodes)
         self.pool = IDPool()
         self.formula = CNF()
-        self.init_var(g, steps)
+        self.init_var(g, steps, conditional_steps)
 
         if od is not None:
             for i, u in enumerate(od):
@@ -352,9 +362,6 @@ class TwinWidthEncoding2:
         self.encode_order(n, steps)
         self.encode_merge(n, steps)
         self.encode_red(n, g, steps)
-
-        if not skip_cards:
-            self.encode_counters(g, d, steps)
 
         if self.sb_ord:
             self.sb_ord2(n, d, g, steps)
@@ -397,6 +404,9 @@ class TwinWidthEncoding2:
                         else:
                             self.formula.append([-self.ord[1][cr1], -self.merge[cr1][cn], self.tred(1, cr2, cn)])
                             self.formula.append([-self.ord[1][cr2], -self.merge[cr2][cn], self.tred(1, cr1, cn)])
+
+        if not skip_cards:
+            self.encode_counters(g, d, steps)
 
         return self.formula
 

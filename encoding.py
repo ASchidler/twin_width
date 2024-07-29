@@ -220,7 +220,7 @@ class TwinWidthEncoding:
                         outp.write(" ".join(str(x) for x in vars))
                         outp.write(f" <= d"+ os.linesep)
 
-    def run(self, g, solver, start_bound, verbose=True, check=True, lb=0, i_od=None, i_mg=None, write=False, parts=None, reds=None):
+    def run(self, g, solver, start_bound, verbose=True, check=True, lb=0, i_od=None, i_mg=None, write=False, parts=None, reds=None, steps_limit=None):
         start = time.time()
         formula = self.encode(g, start_bound, i_od, i_mg, parts=parts, reds=reds)
         cb = start_bound
