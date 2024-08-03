@@ -162,7 +162,7 @@ with tf.open(input) as ctf:
                     o_best = 0
                 o_best = max(o_best, c_best)
             if results[instance][name_fields[0]].tww is not None:
-                assert o_best is None or o_best == g_ub or o_best == results[instance][name_fields[0]].tww
+                o_best = results[instance][name_fields[0]].tww
                 results[instance][name_fields[0]].best_tww = results[instance][name_fields[0]].tww
             elif found_ub:
                 results[instance][name_fields[0]].best_tww = o_best

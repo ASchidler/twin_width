@@ -487,6 +487,7 @@ class TwinWidthEncoding2:
                 if slv.solve() if timeout == 0 else slv.solve_limited():
                     if verbose:
                         print(f"Found {i}")
+                        sys.stdout.flush()
                     cb, od, mg = self.decode(slv.get_model(), g, i, steps, verbose)
                     i = cb - 1
                 else:

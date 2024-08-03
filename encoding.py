@@ -1,4 +1,5 @@
 import os
+import sys
 
 from networkx import Graph
 from functools import cmp_to_key
@@ -251,6 +252,7 @@ class TwinWidthEncoding:
                 if slv.solve():
                     if verbose:
                         print(f"Found {i}")
+                        sys.stdout.flush()
                     if check:
                         mx, od, mg = self.decode(slv.get_model(), g, i, verbose)
                     if self.use_sb_static and self.use_sb_static_full:
