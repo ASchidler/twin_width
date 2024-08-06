@@ -277,6 +277,7 @@ class TwinWidthEncoding2:
                             start = [-self.ord[t][i], -self.merge[i][j], self.tred(t, j, k)]
                             for t2 in range(1, t):
                                 start.append(self.ord[t2][k])
+                            self.formula.append(start)
                         else:
                             if t > 1:
                                 start = [-self.ord_vars[i][t], self.ord_vars[j][t], self.ord_vars[k][t],
@@ -363,6 +364,9 @@ class TwinWidthEncoding2:
         self.encode_merge(n, steps)
         self.encode_red(n, g, steps)
 
+        if not skip_cards:
+            self.encode_counters(g, d, steps)
+            
         if self.sb_ord:
             self.sb_ord2(n, d, g, steps)
 
@@ -405,8 +409,6 @@ class TwinWidthEncoding2:
                             self.formula.append([-self.ord[1][cr1], -self.merge[cr1][cn], self.tred(1, cr2, cn)])
                             self.formula.append([-self.ord[1][cr2], -self.merge[cr2][cn], self.tred(1, cr1, cn)])
 
-        if not skip_cards:
-            self.encode_counters(g, d, steps)
 
         return self.formula
 

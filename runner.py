@@ -130,6 +130,7 @@ else:
                                                    sb_static_full=args.contraction_full,
                                                    cubic=2, sb_static_diff=args.contraction_diff, break_g_symmetry=True)
 
+            sys.stdout.flush()
             cb = enc.run(ng, slv.Cadical195, ub, verbose=args.verbose, write=True, steps_limit=None)
 
             remaining = set(ng.nodes)
