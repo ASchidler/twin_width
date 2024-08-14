@@ -4,6 +4,7 @@ import sys
 import parser_mappings as pm
 from collections import defaultdict
 
+
 class SolverResult:
     def __init__(self):
         self.solved = 0
@@ -13,7 +14,7 @@ class SolverResult:
         self.counter = 0
 
 
-target_set = 0
+target_set = 1
 files = ["tww-pace", "tww-long", "tww-twlib", "tww-twlong"]
 solver_results = defaultdict(lambda: [SolverResult() for _ in range(0, 4)])
 
@@ -37,6 +38,8 @@ for cfi, cf in enumerate(files):
                     cs = cn.split(" ")[0].split("-")[-1]
                     if cs == '':
                         continue
+                    cs = pm.resolve_solver(cs)
+
                     if cn.endswith(" tww"):
                         solver_results[cs][cfi].counter += 1
                         last_solved = False

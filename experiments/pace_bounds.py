@@ -140,7 +140,7 @@ for ck in sorted(lbs):
     print(f"{ck}\t{lb_results[ck].best} ({lb_results[ck].unique})\t{lb_results[ck].matched} ({lb_results[ck].matched_unique})")
 
 gfg_data = [y-x for (x, y) in lb_ub]
-conf_int = st.t.interval(alpha=0.95, df=len(gfg_data)-1,
+conf_int = st.t.interval(confidence=0.95, df=len(gfg_data)-1,
               loc=np.mean(gfg_data),
               scale=st.sem(gfg_data))
 

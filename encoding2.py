@@ -366,7 +366,7 @@ class TwinWidthEncoding2:
 
         if not skip_cards:
             self.encode_counters(g, d, steps)
-            
+
         if self.sb_ord:
             self.sb_ord2(n, d, g, steps)
 

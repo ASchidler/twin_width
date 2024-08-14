@@ -1,6 +1,6 @@
-vertex_bins = [25, 50, 100, 250]
-density_bins = [round(0.1 * x, 1) for x in range(1, 8)]
-tww_bins = [3,5,10,25]
+vertex_bins = [25, 50, 75, 100]
+density_bins = [0.1, 0.25, 0.5, 0.75]
+tww_bins = [3, 5, 10, 25]
 
 target = 2
 if target == 0:
@@ -11,6 +11,7 @@ elif target == 2:
     target_bins = tww_bins
 
 bins = [[0,0] for _ in range(0, len(target_bins)+1)]
+names = ["Vertices", "Density", "Twin-Width"]
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -46,13 +47,18 @@ for x in ["tww-twlong.csv", "tww-long.csv"]:
                         bins[-1][0 if solved else 1] += 1
 
 ind = np.arange(len(bins))
-fig = plt.subplots(figsize =(10, 7))
-p1 = plt.bar(ind, [x[0] for x in bins], 0.35, color="green")
-p2 = plt.bar(ind, [x[1] for x in bins], 0.35, bottom =  [x[0] for x in bins], color=red)
+fig = plt.subplots(figsize=(4, 3))
+p1 = plt.bar(ind, [x[0] for x in bins], 0.35, color="#1B7939")
+p2 = plt.bar(ind, [x[1] for x in bins], 0.35, bottom=[x[0] for x in bins], color="#EB5F4C")
 
 plt.ylabel('Instances')
+plt.xlabel(names[target])
 plt.xticks(ind, [*[f"$<${x}" for x in target_bins], f"$\geq${target_bins[-1]}"])
 # plt.yticks(np.arange(0, 81, 10))
 plt.legend((p1[0], p2[0]), ('Solved', 'Unsolved'))
+plt.gcf().subplots_adjust(left=0.15)
+plt.gcf().subplots_adjust(bottom=0.15)
 
+plt.plot()
+plt.savefig(f"bar_{target}.pdf")
 plt.show()

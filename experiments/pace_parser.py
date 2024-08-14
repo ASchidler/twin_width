@@ -3,7 +3,7 @@ import tarfile as tf
 import os
 from collections import defaultdict
 
-input = "logs/tww-pace.tar.bz2"
+input = "logs/tww-twlong.tar.bz2"
 instance_path = "/Users/andre/Downloads/exact-private/"
 
 

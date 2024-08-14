@@ -5,7 +5,7 @@ from collections import defaultdict
 
 prefixes = ["tww-long", "tww-twlong"]
 target_prefix = prefixes[1]
-target_solvers = {"cdo", "sat0", "sat1c", "sat3", "winner"}
+target_solvers = {"cdo", "cod", "co", "sat0", "sat1c", "winner"}
 penalty_time = 7200
 
 names = []
@@ -51,7 +51,7 @@ with open(target_prefix +".csv") as inp:
         if i == 0:
             for j in range(1, len(fd)):
                 if fd[j].endswith("Time") and any(fd[j].startswith(target_prefix + "-"+ x +" ") for x in target_solvers):
-                    target_cols.append((fd[j].split(" ")[0], j))
+                    target_cols.append((pm.resolve_solver(fd[j].split(" ")[0]), j))
         else:
             for cdn, cdi  in target_cols:
                 if fd[cdi+2] == "":
@@ -81,8 +81,11 @@ for i, l in enumerate(lines):
 
 plt.ylabel("Instance")
 plt.xlabel("Runtime [s]")
-plt.legend([pm.map_solver(target_prefix, s.split("-")[-1]) for s in names])
+names.sort(key=lambda x: pm.order_solver(x))
+plt.legend([pm.map_solver(s) for s in names])
+# plt.gcf().subplots_adjust(left=0.15)
+# plt.gcf().subplots_adjust(bottom=0.15)
 plt.plot()
 # plt.xlim(0, 425)
-plt.savefig("cactus.pdf")
+plt.savefig(f"cactus_{target_prefix}.pdf")
 plt.show()
