@@ -138,9 +138,10 @@ else:
             remaining = list(remaining)
             eliminations.extend([r_map[x] for x in cb[1]])
 
+            for ck, cv in cb[2].items():
+                parents[r_map[ck]] = r_map[cv]
+
             if len(remaining) >= 1:
-                for ck, cv in cb[2].items():
-                    parents[r_map[ck]] = r_map[cv]
                 for cn in remaining[:-1]:
                     eliminations.append(r_map[cn])
                     parents[r_map[cn]] = r_map[remaining[-1]]
@@ -154,7 +155,6 @@ else:
         eliminations.append(cn)
         parents[cn] = single_nodes[-1]
 
-    print(f"Finished")
     print(f"({max_tww}, {eliminations}, {parents})")
 
 if args.draw:
