@@ -4,7 +4,7 @@ The Branch & Bound solver can be found at https://github.com/ASchidler/tww-bb
 The respective papers are:
 - "A SAT approach to twin-width" ALENEX 2022 (https://epubs.siam.org/doi/abs/10.1137/1.9781611977042.6)
 - "Computing Twin-width with SAT and Branch & Bound", IJCAI 2023 (https://www.ijcai.org/proceedings/2023/224)
-- "https://drops.dagstuhl.de/entities/document/10.4230/LIPIcs.SAT.2022.15", SAT 2022 (https://drops.dagstuhl.de/entities/document/10.4230/LIPIcs.SAT.2022.15)
+- "Weighted Model Counting with Twin-Width", SAT 2022 (https://drops.dagstuhl.de/entities/document/10.4230/LIPIcs.SAT.2022.15)
 
 We used python 3.11.5, python-sat 1.8.dev13, networkx 2.8.8, and pynauty 2.8.6
 
