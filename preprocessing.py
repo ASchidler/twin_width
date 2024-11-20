@@ -1,4 +1,5 @@
 def twin_merge(g):
+    contractions = []
     changed = True
     while changed:
         changed = False
@@ -14,4 +15,7 @@ def twin_merge(g):
                     if len(nbs) == 0:
                         g.remove_node(n1)
                         changed = True
+                        contractions.append((n2, n1))
                         break
+
+    return contractions

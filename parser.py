@@ -1,8 +1,20 @@
+import lzma
+
 import networkx as nx
 import bz2
 
 
 def parse(path):
+    if path.endswith(".xz"):
+        edges = []
+        with lzma.open(path) as inp:
+            for i, cl in enumerate(inp):
+                cl = cl.decode("ascii")
+                if not cl.startswith("p ") and not cl.startswith("c "):
+                    edges.append([int(x) for x in cl.strip().split()])
+        return nx.from_edgelist(edges), set()
+
+
     if path.lower().endswith(".bz2"):
         f = bz2.open(path, mode='rb')
     else:
@@ -22,6 +34,9 @@ def parse(path):
             if line.lower().strip() == "cvertices":
                 mode_edges = False
             else:
+                if len(entries) == 3 and entries[-1].startswith("{") and entries[-1].endswith("}"):
+                    entries.pop()
+
                 if len(entries) == 2 or (len(entries) == 3 and entries[0].lower().strip() == "e"):
                     try:
                         g.add_edge(int(entries[-2].strip()), int(entries[-1].strip()))

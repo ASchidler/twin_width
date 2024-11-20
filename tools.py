@@ -1,20 +1,20 @@
 import os
-import sys
 
 import networkx as nx
 from pysat.card import CardEnc
 from pysat.formula import CNF
 
 
-def amo_commander(vars, vpool, m=2):
+def amo_commander(literals, vpool, m=2):
+    """At-most-one constraints using the commander encoding. [Klieber and Kwon]"""
     formula = CNF()
     # Separate into list
     cnt = 0
     groups = []
-    while cnt < len(vars):
+    while cnt < len(literals):
         cg = []
-        for i in range(0, min(m, len(vars) - cnt)):
-            cg.append(vars[cnt + i])
+        for i in range(0, min(m, len(literals) - cnt)):
+            cg.append(literals[cnt + i])
         groups.append(cg)
         cnt += m
 
@@ -40,6 +40,7 @@ def amo_commander(vars, vpool, m=2):
 
 
 def dot_export(g, u, v, is_sat=False):
+    """Creates a dot file of the given graph, where the edge between u and v is specifically marked."""
     def cln(name):
         return f"{name}".replace("(", "").replace(")", "").replace(",", "").replace(" ", "_")
 
@@ -87,35 +88,16 @@ def dot_export(g, u, v, is_sat=False):
 
     for x, y in g.edges:
         cl = 'red' if 'red' in g[x][y] and g[x][y]['red'] else 'black'
-        label = ""
-        if cl == "black":
-            label = f"label=\"{'+' if x.startswith('c') else '-'} \";"
-        output1 += f"n{cln(x)} -- n{cln(y)} [color={cl};{label}];{os.linesep}"
-
-    # # Draw the linegraph
-    # output2 = "strict graph dt {" + os.linesep
-    # u, v = min(u, v), max(u, v)
-    # for x, y in g.edges:
-    #     x, y = min(x, y), max(x, y)
-    #     color = 'green' if x == u and v == y else 'white'
-    #     fillcolor = 'red' if 'red' in g[x][y] and g[x][y]['red'] else 'black'
-    #     output2 += f"n{cln(x)}_{cln(y)} [" \
-    #     f"shape=box, fontsize=11,style=filled,fontcolor={color}," \
-    #     f"color={color}, fillcolor={fillcolor}];{os.linesep}"
-    #
-    # for n in g.nodes:
-    #     for n1 in g[n]:
-    #         x1, x2 = min(n1, n), max(n1, n)
-    #         for n2 in g[n]:
-    #             if n2 > n1:
-    #                 cl = 'green' if n1 == u and n2 == v else 'black'
-    #                 x3, x4 = min(n2, n), max(n2, n)
-    #                 output2 += f"n{cln(x1)}_{cln(x2)} -- n{cln(x3)}_{cln(x4)} [color={cl}];{os.linesep}"
+        if is_sat:
+            output1 += f"n{cln(x)} -- n{cln(y)} [color={cl},label=\"{'-' if cln(x).startswith('v') else '+'}\"];{os.linesep}"
+        else:
+            output1 += f"n{cln(x)} -- n{cln(y)} [color={cl}];{os.linesep}"
 
     return output1 + "}"
 
 
 def find_modules(g):
+    """Creates a modular decomposition for the graph."""
     ordering = [x for x in g.nodes]
     m = None
     for _ in range(0, len(g.nodes)):
@@ -204,6 +186,7 @@ def _find_modules(g, p):
 
 
 def check_result(g, od, mg):
+    """Computes the width of a given twin-width decomposition."""
     for u, v in g.edges:
         g[u][v]['red'] = False
 
@@ -244,6 +227,7 @@ def check_result(g, od, mg):
 
 
 def prime_paley(p):
+    """Creates a Paley graph based on the prime number p (note that p must have p%4 == 1)."""
     G = nx.Graph()
 
     square_set = {(x ** 2) % p for x in range(1, p)}
@@ -257,7 +241,7 @@ def prime_paley(p):
 
 
 def prime_square_paley(p):
-    """Generates the paley graph for p^2"""
+    """Generates the paley graph for p^2 (note that p must have p%4 == 1)."""
     # See: https://en.wikipedia.org/wiki/Finite_field
     G = nx.Graph()
 
@@ -283,6 +267,7 @@ def prime_square_paley(p):
 
 
 def rook(n):
+    """Creates the nxn Rook graph (resembles possible moves of a rook on an nxn chessboard)."""
     g = nx.Graph()
 
     for x1 in range(1, n+1):
@@ -296,6 +281,7 @@ def rook(n):
 
 
 def line(n):
+    """Creates the line graph"""
     g = nx.Graph()
 
     for i in range(1, n+1):
@@ -314,215 +300,135 @@ def line(n):
 
     return g
 
+def _encode_card_0(lits, form):
+    for cl in lits:
+        form.append([-cl])
 
-def solve_grid2(d1, d2, ub):
-    # Create adjacency matrix
-    adj = [[0 for _ in range(0, d1 * d2)] for _ in range(0, d1 * d2)]
+def encode_cards_exact(pool, lits, bound, name, rev=True, add_constraint=True):
+    """Creates a sequential cardinality constraint using equalities, i.e., it states that the cardinality is x instead of >= x."""
+    matrix = [[pool.id(f"{name}_{x}_{y}") for y in range(0, bound+1)] for x in range(0, len(lits))]
+    form = [] # CNF()
+    if bound >= len(lits):
+        return form, []
 
-    for i in range(0, d1):
-        for j in range(0, d2):
-            co1 = i * d1 + j
+    if bound == 0:
+        _encode_card_0(lits, form)
+        return form, []
 
-            for xoff, yoff in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-                if 0 <= i + xoff < d1 and 0 <= j + yoff < d2:
-                    co2 = (i+xoff) * d1 + (j+yoff)
-                    # This should set both directions
-                    adj[co1][co2] = 1
+    # Propagate up
+    for cb in range(0, bound+1):
+        for cr in range(0, len(lits)-1):
+            form.append([-matrix[cr][cb], matrix[cr+1][cb]])
 
-    contracted = [False for _ in range(0, d1 * d2)]
-    counts = [0 for _ in range(0, d1*d2)]
-    target = [0 for _ in range(0, d1 * d2)]
-    od = []
-    mg = {}
+    for cr in range(0, len(lits)):
+        form.append([-lits[cr], matrix[cr][0]])
+        if cr == 0:
+            form.append([-matrix[cr][0], lits[cr]])
+        else:
+            form.append([-matrix[cr][0], lits[cr], matrix[cr-1][0]])
 
-    if solve_grid2_(d1, d2, ub, adj, contracted, od, mg, counts, target):
-        # Complete order
-        missing = []
-        for c_node in range(0, d1*d2):
-            if not contracted[c_node]:
-                missing.append((c_node // d1, c_node % d1))
+        if cr > 0:
+            for cb in range(0, bound):
+                form.append([-lits[cr], -matrix[cr-1][cb], matrix[cr][cb+1]])
+                form.append([-matrix[cr][cb + 1], matrix[cr][cb]])
 
-        for i in range(0, len(missing)-1):
-            od.append(missing[i])
-            mg[missing[i]] = missing[i+1]
-
-        g = nx.Graph()
-        for i in range(0, d1):
-            for j in range(0, d2):
-                for xoff, yoff in [(-1, 0), (1, 0), (0, -1), (-1, 0)]:
-                    if 0 <= i + xoff < d1 and 0 <= j + yoff < d2:
-                        g.add_edge((i, j), (i+xoff, j+yoff))
-
-        if check_result(g, od, mg) > ub:
-            raise RuntimeError("Invalid solution found")
-        for c_n in od:
-            print(f"{c_n}: {mg[c_n]}")
-        return True
-
-    return False
-
-
-def solve_grid2_(d1, d2, ub, adj, contracted, od, mg, counts, target):
-    # Check if graph is fully contracted
-    if d1 * d2 - len(od) <= ub:
-        return True
-
-    for cc in range(0, d1*d2):
-        # Make upper left corner the first node the contract
-        if contracted[cc] or (len(od) == 0 and cc > 0):
-            continue
-
-        # Find two d2 neighbors
-        nbs = set()
-        for cx in range(cc, len(adj)):
-            if not contracted[cx] and adj[cc][cx] > 0:
-                nbs.add(cx)
-                nbs.update((cx2 for cx2 in range(cx, len(adj)) if not contracted[cx2] and adj[cx][cx2] > 0))
-
-        contracted[cc] = True
-        od.append((cc // d1, cc % d1))
-        for cc2 in nbs:
-            any_targets = target[cc2]  # Keeps track of independent merges
-            reds = 0  # Red degree of cc2 after merge
-            new_red = []  # Red edges to introduce
-            for k in range(0, d1 * d2):
-                if contracted[k] or k == cc or k == cc2:
-                    continue
-                if adj[cc2][k] == 2:
-                    reds += 1
-                elif (adj[cc][k] == 2 and adj[cc2][k] <= 1) \
-                        or (adj[cc][k] == 1 and adj[cc2][k] == 0)\
-                        or (adj[cc][k] == 0 and adj[cc2][k] == 1):
-                    any_targets = max(any_targets, target[k])
-                    reds += 1
-                    new_red.append((cc2, k, adj[cc2][k]))
-                    new_red.append((k, cc2, adj[cc2][k]))
-                    if counts[k] == ub:
-                        reds = sys.maxsize
-                        break
-                if reds > ub:
-                    break
-
-            # Second statement says that independent contractions must be performed lexicographically
-            if reds <= ub and all(x[0] * d1 + x[1] < cc for x in od[any_targets:-1]):
-                for ce1, ce2, _ in new_red:
-                    adj[ce1][ce2] = 2
-                    counts[ce1] += 1
-                prev_t = target[cc2]
-                target[cc2] = len(od)
-                if solve_grid2_(d1, d2, ub, adj, contracted, od, mg, counts, target):
-                    mg[(cc // d1, cc % d1)] = (cc2 // d1, cc2 % d1)
-                    return True
-                target[cc2] = prev_t
-                for ce1, ce2, p in new_red:
-                    adj[ce1][ce2] = p
-                    counts[ce1] -= 1
-
-        od.pop()
-        contracted[cc] = False
-    #print(f"{len(od)}")
-    return False
-
-
-def solve_quick(g, ub=sys.maxsize):
-    nodes = {x: i for i, x in enumerate(g.nodes)}
-
-    adj = [[0 for _ in range(0, len(nodes))] for _ in range(0, len(nodes))]
-    for n in g.nodes:
-        nid = nodes[n]
-        for n2 in g.neighbors(n):
-            adj[nid][nodes[n2]] = 1
-
-    # Find degree two neighborhood
-    nbs = [set() for _ in range(0, len(nodes))]
-
-    for n in g.nodes:
-        q = [(n, 0)]
-        lst = nbs[nodes[n]]
-        while q:
-            c_n, d = q.pop()
-
-            if d < 2:
-                for n2 in g.neighbors(c_n):
-                    lst.add(nodes[n2])
-                    q.append((n2, d+1))
-
-        lst.remove(nodes[n])
-
-    for i, lst in enumerate(nbs):
-        nbs[i] = [x for x in lst if x > i]
-
-    contracted = [False for _ in range(0, len(nodes))]
-    counts = [0 for _ in range(0, len(nodes))]
-    od = []
-    mg = {}
-    solve_quick_(adj, nbs, contracted, od, mg, ub, counts)
-
-
-def solve_quick_(adj, nbs, contracted, od, mg, ub, counts):
-    if len(adj) - len(od) == 1:
-        return max(counts), list(od), {x: y for x, y in mg.items()}
-
-    best = None
-
-    for i in range(0, len(adj)):
-        if not contracted[i]:
-            for j in nbs[i]:
-                if not contracted[j]:
-                    reds = 0
-                    new_red = []
-
-                    for k in range(0, len(adj)):
-                        if contracted[k]:
-                            continue
-                        if adj[j][k] == 2:
-                            reds += 1
-                        elif adj[i][k] == 2 and adj[j][k] < 2:
-                            reds += 1
-                            new_red.append((j, k, adj[j][k]))
-                            new_red.append((k, j, adj[j][k]))
-                            if counts[k] == ub:
-                                ub = sys.maxsize
-                                break
-                        elif adj[i][k] == 1 and adj[j][k] == 0:
-                            reds += 1
-                            new_red.append((j, k, 0))
-                            new_red.append((k, j, 0))
-                            if counts[k] == ub:
-                                ub = sys.maxsize
-                                break
-                        elif adj[i][k] == 0 and adj[j][k] == 1:
-                            reds += 1
-                            new_red.append((j, k, 1))
-                            new_red.append((k, j, 1))
-                            if counts[k] == ub:
-                                ub = sys.maxsize
-                                break
-
-                        if reds > ub:
-                            break
-
-                    if reds <= ub:
-                        contracted[i] = True
-
-                        for ce1, ce2, _ in new_red:
-                            adj[ce1][ce2] = 2
-                            counts[ce1] += 1
-                        od.append(i)
-                        mg[i] = j
-
-                        result = solve_quick_(adj, nbs, contracted, od, mg, ub, counts)
-                        if result is not None:
-                            best = result
-                            ub = result[0]
-
-                        contracted[i] = False
-                        od.pop()
-                        mg.pop(i)
-                        for ce1, ce2, p in new_red:
-                            adj[ce1][ce2] = p
-                            counts[ce1] -= 1
+                if rev:
+                    if cr == 0:
+                        form.append([-matrix[cr][cb+1], lits[cr]])
                     else:
-                        print(f"Conflict {len(od)}")
+                        form.append([-matrix[cr][cb+1], lits[cr], matrix[cr-1][cb+1]])
 
-    return best
+    if add_constraint:
+        for cr in range(0, len(lits)):
+            form.append([-matrix[cr][bound]])
+
+    return form, matrix[-1]
+
+
+def encode_cards_exact_tot(pool, lits, bound, name):
+    """Creates a totalizer constraint using equalities, i.e., it states that the cardinality is x instead of >= x."""
+    form = CNF()
+    if bound >= len(lits):
+        return form
+
+    if bound == 0:
+        _encode_card_0(lits, form)
+        return form
+
+    cvars = [pool.id(f"{name}_{x}") for x in range(0, len(lits))]
+
+    ilst = list(lits)
+    olst = list(cvars)
+
+    stack = [(ilst, olst, pool.top)]
+
+    while stack:
+        ilst, olst, vid = stack.pop()
+
+        n = len(ilst)
+        half = n - (n//2)
+
+        fhalf = ilst[:half]
+        shalf = ilst[half:]
+
+        if len(fhalf) < 2:
+            ofhalf = list(fhalf)
+        else:
+            ofhalf = [pool.id(f"{name}_fh_{vid}_{x}") for x in range(0, len(fhalf))]
+            stack.append((fhalf, ofhalf, pool.top))
+
+        if len(shalf) < 2:
+            oshalf = list(shalf)
+        else:
+            oshalf = [pool.id(f"{name}_sh_{vid}_{x}") for x in range(0, len(shalf))]
+            stack.append((shalf, oshalf, pool.top))
+
+        for j in range(0, len(oshalf)):
+            form.append([-oshalf[j], olst[j]])
+
+        for i in range(0, len(ofhalf)):
+            form.append([-ofhalf[i], olst[i]])
+
+        cl = [[] for _ in range(0, len(olst) + 1)]
+        for i in range(1, len(ofhalf)+1):
+            for j in range(1, len(oshalf) + 1):
+                form.append([-ofhalf[i-1], -oshalf[j-1], olst[i + j -1]])
+                # cl[]
+                # aux = pool.id(f"{name}_olsta_{vid}_{i}_{j}")
+                # form.append([-ofhalf[i - 1], -oshalf[j - 1], aux])
+                # form.append([ofhalf[i - 1], -aux])
+                # form.append([oshalf[j - 1], -aux])
+                cl[i + j - 1].append(ofhalf[i-1])
+
+        # Reverse
+        for i in range(0, len(olst)):
+            if i < len(ofhalf):
+                cl[i].append(ofhalf[i])
+            if i < len(oshalf):
+                cl[i].append(oshalf[i])
+
+            cl[i].append(-olst[i])
+            form.append(cl[i])
+
+    # Enforce bound
+    for cr in range(0, len(lits)):
+        form.append([-cvars[bound]])
+
+    return form, cvars[:bound+1]
+
+
+def amo_seq(lits, name, pool):
+    """Creates a sequential cardinality constraints [Sinz]."""
+    if len(lits) == 0:
+        return
+
+    vars = [lits[0]]
+    vars.extend(pool.id(f"{name}_{i}") for i in range(1, len(lits)))
+    clauses = []
+
+    for i in range(1, len(lits)):
+        clauses.append([-vars[i - 1], -lits[i]])
+        clauses.append([-lits[i], vars[i]])
+        clauses.append([-vars[i - 1], vars[i]])
+
+    return clauses, vars
