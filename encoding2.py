@@ -555,7 +555,14 @@ class TwinWidthEncoding2:
 
         c_max = 0
         step = 1
-        for n in od:
+
+        unordered = list(unordered)
+        for cni, cn in enumerate(unordered):
+            od.append(cn)
+            if cni+1 < len(unordered):
+                mg[cn] = unordered[cni+1]
+
+        for ni, n in enumerate(od[:-1]):
             if verbose:
                 print(f"{n} => {mg[n]}")
             t = unmap[mg[n]]
@@ -586,7 +593,7 @@ class TwinWidthEncoding2:
                         cc += 1
                         u2, v2 = self.node_map[u], self.node_map[v]
                         u2, v2 = min(u2, v2), max(u2, v2)
-                        if not model[self.red[step][u2][v2]]:
+                        if ni < len(g.nodes) - len(unordered) and not model[self.red[step][u2][v2]]:
                             print(f"Missing red edge in step {step}")
 
                 if cc > d:
@@ -594,4 +601,8 @@ class TwinWidthEncoding2:
                 c_max = max(c_max, cc)
 
             step += 1
+
+        od = [unmap[x] for x in od]
+        mg = {unmap[x]: unmap[y] for x, y in mg.items()}
+
         return c_max, od, mg

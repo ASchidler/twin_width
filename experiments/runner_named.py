@@ -1,3 +1,4 @@
+"""Runs the encodings on the named/famous graphs and outputs the result."""
 import os
 import resource
 import sys
@@ -8,11 +9,10 @@ import pysat.solvers as slv
 import encoding, encoding3
 import heuristic
 import parser
-# import test_preprocessing
 
 resource.setrlimit(resource.RLIMIT_AS, (4 * 1024 * 1024 * 1024, 4 * 1024 * 1024 * 1024))
 
-path = "experiments/instances"
+path = "experiments/instances/famous"
 graphs = []
 results = {}
 
@@ -22,7 +22,7 @@ for cf in sorted(list(os.listdir(path))):
         g = parser.parse(instance)[0]
         graphs.append((g, cf))
 
-graphs.sort(key=lambda x: (len(x[0].nodes), len(x[0].edges)), reverse=True)
+graphs.sort(key=lambda x: (len(x[0].nodes), len(x[0].edges)))
 for g, cf in graphs:
     print(f"{cf}: {len(g.nodes)}")
     # test_preprocessing.twin_merge(g)
@@ -50,14 +50,14 @@ for g, cf in graphs:
         glb.remove_node(cmn)
 
     print(f"Lower Bound: {lb}")
-    ub = min(heuristic.get_ub(g), heuristic.get_ub2(g))
+    ub = heuristic.get_ub3(g)
 
     cb = ub
 
     start = time.time()
     # enc = encoding.TwinWidthEncoding()
     enc = encoding3.TwinWidthEncoding2(g, cubic=2, sb_static=0)
-    result = enc.run(g, slv.Cadical, ub, lb=lb, verbose=False)
+    result = enc.run(g, slv.Cadical195, ub, lb=lb, verbose=False)
 
     print(f"Finished, result: {result}\n\n")
     results[cf] = result

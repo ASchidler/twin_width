@@ -5,14 +5,14 @@ from collections import defaultdict
 from multiprocessing import Pool
 
 import networkx
-from pysat.solvers import Cadical
+from pysat.solvers import Cadical195
 
 import encoding
 import experiments.nauty_limits as nl
 import heuristic
 import tools
 
-solver = Cadical
+solver = Cadical195
 pool_size = 4
 
 if len(sys.argv) > 2:
@@ -40,8 +40,8 @@ def add_runner(g_str):
     if len(g.nodes) <= 2:
         result = 0
     else:
-        ub = min(heuristic.get_ub(g), heuristic.get_ub2(g))
-        result = enc.run(g, Cadical, ub, verbose=False, check=False)
+        ub = heuristic.get_ub3(g)
+        result = enc.run(g, Cadical195, ub, verbose=False, check=False)
 
     return result, g_str, len(g.edges)
 

@@ -2,6 +2,7 @@ from os import linesep
 
 
 class BaseEncoding:
+    """Base functions used for all encodings."""
     def __init__(self, stream):
         self.size_limit = 50 * 1000 * 1000 * 1000
         self.vars = 0

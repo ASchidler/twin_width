@@ -35,9 +35,9 @@ last_sat = sys.maxsize
 
 while c_bound > last_unsat:
     if signed:
-        proc = subprocess.Popen(["./dcwd", fname, str(c_bound)], stdout=subprocess.PIPE)
+        proc = subprocess.Popen(["bin/dcwd", fname, str(c_bound)], stdout=subprocess.PIPE)
     else:
-        proc = subprocess.Popen(["./cwd", fname, str(c_bound)], stdout=subprocess.PIPE)
+        proc = subprocess.Popen(["bin/cwd", fname, str(c_bound)], stdout=subprocess.PIPE)
 
     with Glucose4() as slv:
         for line in io.TextIOWrapper(proc.stdout):

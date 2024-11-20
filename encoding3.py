@@ -11,7 +11,7 @@ import tools
 
 
 class TwinWidthEncoding2:
-    def __init__(self, g, card_enc=EncType.mtotalizer, cubic=0, sb_ord=False, twohop=False, sb_static=sys.maxsize, sb_static_full=False, sb_static_diff=False, break_g_symmetry=False):
+    def __init__(self, g, card_enc=EncType.mtotalizer, cubic=2, sb_ord=False, twohop=False, sb_static=sys.maxsize, sb_static_full=False, sb_static_diff=False, break_g_symmetry=False):
         self.ord = None
         self.merge = None
         self.merged_edge = None
@@ -897,6 +897,12 @@ class TwinWidthEncoding2:
                             print("Error, double merge!")
                         mg[t] = j
 
+        unordered = list(unordered)
+        for cni, cn in enumerate(unordered):
+            od.append(cn)
+            if cni + 1 < len(unordered):
+                mg[cn] = unordered[cni + 1]
+
         # Perform contractions, last node needs not be contracted...
         for u, v in g.edges:
             g[u][v]['red'] = False
@@ -907,7 +913,7 @@ class TwinWidthEncoding2:
         decreases = [[]]
         red_counts = [[]]
 
-        for i, n in enumerate(od):
+        for i, n in enumerate(od[:-1]):
             if verbose:
                 print(f"{n} => {mg[n]}")
 
@@ -946,7 +952,7 @@ class TwinWidthEncoding2:
                         u2, v2 = self.node_map[u], self.node_map[v]
                         u2, v2 = min(u2, v2), max(u2, v2)
 
-                        if not model[self.red[step][u2][v2]]:
+                        if i < len(g.nodes) - len(unordered) and not model[self.red[step][u2][v2]]:
                             print(f"Missing red edge in step {step}")
                 red_counts[-1][u] = cc
                 if step > 1 and red_counts[-2][u] < red_counts[-1][u]:
@@ -982,5 +988,8 @@ class TwinWidthEncoding2:
 
             if od[i] > i+1:
                 watches.add((i, od[i]))
+
+        od = [unmap[x] for x in od]
+        mg = {unmap[x]: unmap[y] for x, y in mg.items()}
 
         return c_max, od, mg

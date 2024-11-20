@@ -1,3 +1,4 @@
+
 finished = 10
 
 nauty_smallest = {

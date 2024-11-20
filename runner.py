@@ -9,7 +9,6 @@ import pysat.solvers as slv
 import encoding as encoding
 import encoding2 as encoding2
 import encoding3 as encoding3
-import encoding_lazy2 as lazy2
 
 import encoding_signed_bipartite
 import heuristic
@@ -17,14 +16,13 @@ import parser
 import preprocessing
 import tools
 import resource
-import treewidth
 import argparse as argp
 
 
 ap = argp.ArgumentParser(description="Python implementation for computing and improving decision trees.")
 ap.add_argument("instance", type=str)
-ap.add_argument("-e", dest="encoding", action="store", default=0, choices=[0, 1, 2, 3], type=int,
-                help="The encoding to use (0=Relative, 1=Absolute, 2=Absolute Incremental, 3=Absolute with cardinality trick")
+ap.add_argument("-e", dest="encoding", action="store", default=0, choices=[0, 1, 2], type=int,
+                help="The encoding to use (0=Relative, 1=Absolute, 2=Absolute with cardinality trick")
 ap.add_argument("-c", dest="cubic", action="store_true", default=False,
                 help="Cubic mode, reduces the number of clauses from n^4 to n^3 (only available for absolute encodings)"
                 )
@@ -59,7 +57,7 @@ print(instance)
 issat = False
 
 
-if instance.endswith(".cnf"):
+if instance.endswith(".cnf") or instance.endswith(".cnf.bz2"):
     issat = True
     g = parser.parse_cnf(instance)
     ub = heuristic.get_ub2_polarity(g)
@@ -67,20 +65,20 @@ if instance.endswith(".cnf"):
 
     start = time.time()
 
-    if len(sys.argv) > 2 and not args.draw:
-        cb = treewidth.solve(g.to_undirected(), len(g.nodes) - 1, slv.Glucose3, True)[1]
-    else:
-        enc = encoding_signed_bipartite.TwinWidthEncoding()
-        cb = enc.run(g, slv.Cadical195, ub)
+    enc = encoding_signed_bipartite.TwinWidthEncoding()
+    cb = enc.run(g, slv.Cadical195, ub)
 
     print(f"Finished")
-    print(f"{cb}")
+    print(f"Width {cb[0]}")
+    for cn in cb[1]:
+        if cn in cb[2]:
+            print(f"{cn} {cb[2][cn]}")
 else:
     g = parser.parse(args.instance)[0]
 
     if len(g.nodes) == 1:
         print("Finished")
-        print("[0, [0], {}]")
+        print("Width: 0")
         exit(0)
 
     eliminations = []
@@ -122,8 +120,6 @@ else:
             elif args.encoding == 1:
                 enc = encoding2.TwinWidthEncoding2(ng, sb_ord=args.order, sb_static=0 if not args.contraction else args.contraction_limit, sb_static_full=args.contraction_full,
                                                    cubic=2 if args.cubic else 0, sb_static_diff=args.contraction_diff, break_g_symmetry=True)
-            elif args.encoding == 2:
-                enc = lazy2.TwinWidthEncoding2(ng, sb_ord=args.order, sb_static=0 if not args.contraction else args.contraction_limit)
             else:
                 enc = encoding3.TwinWidthEncoding2(ng, sb_ord=args.order,
                                                    sb_static=0 if not args.contraction else args.contraction_limit,
@@ -155,7 +151,10 @@ else:
         eliminations.append(cn)
         parents[cn] = single_nodes[-1]
 
-    print(f"({max_tww}, {eliminations}, {parents})")
+    print(f"Width: {max_tww}")
+    for cv in eliminations:
+        if cv in parents:
+            print(f"{parents[cv]} {cv}")
 
 if args.draw:
     instance_name = os.path.split(instance)[-1]

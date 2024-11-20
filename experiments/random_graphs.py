@@ -1,3 +1,5 @@
+"""Runs the encodings on random graphs. First argument is the encoding. Settings like increment and ndoe size range are in the beginning of the script."""
+
 import os
 import sys
 import time
@@ -5,7 +7,7 @@ from multiprocessing import Pool
 
 import networkx as nx
 from networkx.generators.random_graphs import gnp_random_graph
-from pysat.solvers import Cadical153
+from pysat.solvers import Cadical195
 
 import encoding, encoding2, encoding3
 import heuristic
@@ -47,7 +49,7 @@ def compute_graph(args):
         else:
             enc = encoding3.TwinWidthEncoding2(g, cubic=2, sb_ord=True, sb_static=sys.maxsize, sb_static_full=True, sb_static_diff=False)
         # enc = encoding_lazy2.TwinWidthEncoding2(g, cubic=True, sb_ord=True)
-        result = enc.run(cg, Cadical153, heuristic.get_ub(cg), check=False, verbose=False)
+        result = enc.run(cg, Cadical195, heuristic.get_ub3(cg), check=False, verbose=False)
         if isinstance(result, int):
             tww = max(tww, result)
         else:

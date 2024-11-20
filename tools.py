@@ -1,22 +1,20 @@
-import math
 import os
-import sys
-from collections import defaultdict
 
 import networkx as nx
 from pysat.card import CardEnc
 from pysat.formula import CNF
 
 
-def amo_commander(vars, vpool, m=2):
+def amo_commander(literals, vpool, m=2):
+    """At-most-one constraints using the commander encoding. [Klieber and Kwon]"""
     formula = CNF()
     # Separate into list
     cnt = 0
     groups = []
-    while cnt < len(vars):
+    while cnt < len(literals):
         cg = []
-        for i in range(0, min(m, len(vars) - cnt)):
-            cg.append(vars[cnt + i])
+        for i in range(0, min(m, len(literals) - cnt)):
+            cg.append(literals[cnt + i])
         groups.append(cg)
         cnt += m
 
@@ -42,6 +40,7 @@ def amo_commander(vars, vpool, m=2):
 
 
 def dot_export(g, u, v, is_sat=False):
+    """Creates a dot file of the given graph, where the edge between u and v is specifically marked."""
     def cln(name):
         return f"{name}".replace("(", "").replace(")", "").replace(",", "").replace(" ", "_")
 
@@ -94,30 +93,11 @@ def dot_export(g, u, v, is_sat=False):
         else:
             output1 += f"n{cln(x)} -- n{cln(y)} [color={cl}];{os.linesep}"
 
-    # # Draw the linegraph
-    # output2 = "strict graph dt {" + os.linesep
-    # u, v = min(u, v), max(u, v)
-    # for x, y in g.edges:
-    #     x, y = min(x, y), max(x, y)
-    #     color = 'green' if x == u and v == y else 'white'
-    #     fillcolor = 'red' if 'red' in g[x][y] and g[x][y]['red'] else 'black'
-    #     output2 += f"n{cln(x)}_{cln(y)} [" \
-    #     f"shape=box, fontsize=11,style=filled,fontcolor={color}," \
-    #     f"color={color}, fillcolor={fillcolor}];{os.linesep}"
-    #
-    # for n in g.nodes:
-    #     for n1 in g[n]:
-    #         x1, x2 = min(n1, n), max(n1, n)
-    #         for n2 in g[n]:
-    #             if n2 > n1:
-    #                 cl = 'green' if n1 == u and n2 == v else 'black'
-    #                 x3, x4 = min(n2, n), max(n2, n)
-    #                 output2 += f"n{cln(x1)}_{cln(x2)} -- n{cln(x3)}_{cln(x4)} [color={cl}];{os.linesep}"
-
     return output1 + "}"
 
 
 def find_modules(g):
+    """Creates a modular decomposition for the graph."""
     ordering = [x for x in g.nodes]
     m = None
     for _ in range(0, len(g.nodes)):
@@ -206,6 +186,7 @@ def _find_modules(g, p):
 
 
 def check_result(g, od, mg):
+    """Computes the width of a given twin-width decomposition."""
     for u, v in g.edges:
         g[u][v]['red'] = False
 
@@ -246,6 +227,7 @@ def check_result(g, od, mg):
 
 
 def prime_paley(p):
+    """Creates a Paley graph based on the prime number p (note that p must have p%4 == 1)."""
     G = nx.Graph()
 
     square_set = {(x ** 2) % p for x in range(1, p)}
@@ -259,7 +241,7 @@ def prime_paley(p):
 
 
 def prime_square_paley(p):
-    """Generates the paley graph for p^2"""
+    """Generates the paley graph for p^2 (note that p must have p%4 == 1)."""
     # See: https://en.wikipedia.org/wiki/Finite_field
     G = nx.Graph()
 
@@ -285,6 +267,7 @@ def prime_square_paley(p):
 
 
 def rook(n):
+    """Creates the nxn Rook graph (resembles possible moves of a rook on an nxn chessboard)."""
     g = nx.Graph()
 
     for x1 in range(1, n+1):
@@ -298,6 +281,7 @@ def rook(n):
 
 
 def line(n):
+    """Creates the line graph"""
     g = nx.Graph()
 
     for i in range(1, n+1):
@@ -316,18 +300,19 @@ def line(n):
 
     return g
 
-def encode_card_0(lits, form):
+def _encode_card_0(lits, form):
     for cl in lits:
         form.append([-cl])
 
 def encode_cards_exact(pool, lits, bound, name, rev=True, add_constraint=True):
+    """Creates a sequential cardinality constraint using equalities, i.e., it states that the cardinality is x instead of >= x."""
     matrix = [[pool.id(f"{name}_{x}_{y}") for y in range(0, bound+1)] for x in range(0, len(lits))]
     form = [] # CNF()
     if bound >= len(lits):
         return form, []
 
     if bound == 0:
-        encode_card_0(lits, form)
+        _encode_card_0(lits, form)
         return form, []
 
     # Propagate up
@@ -361,12 +346,13 @@ def encode_cards_exact(pool, lits, bound, name, rev=True, add_constraint=True):
 
 
 def encode_cards_exact_tot(pool, lits, bound, name):
+    """Creates a totalizer constraint using equalities, i.e., it states that the cardinality is x instead of >= x."""
     form = CNF()
     if bound >= len(lits):
         return form
 
     if bound == 0:
-        encode_card_0(lits, form)
+        _encode_card_0(lits, form)
         return form
 
     cvars = [pool.id(f"{name}_{x}") for x in range(0, len(lits))]
@@ -432,6 +418,7 @@ def encode_cards_exact_tot(pool, lits, bound, name):
 
 
 def amo_seq(lits, name, pool):
+    """Creates a sequential cardinality constraints [Sinz]."""
     if len(lits) == 0:
         return
 

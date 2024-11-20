@@ -441,12 +441,13 @@ class TwinWidthEncoding:
                 cc = 0
                 for v in g.neighbors(u):
                     if g[u][v]['red']:
-                        assert model[self.tedge(od[c_step], u, v)]
+                        assert model[self.tedge(od[c_step], self.node_map[u], self.node_map[v])]
                         cc += 1
                 c_max = max(c_max, cc)
                 if c_max > d:
                     print(f"Error: Bound exceeded {c_max}/{d}, Step {c_step+1}, Node {u}")
 
             cnt += 1
-
+        od = [unmap[x] for x in od]
+        mg = {unmap[x]: unmap[y] for x, y in mg.items()}
         return c_max, od, mg

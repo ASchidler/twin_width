@@ -11,7 +11,6 @@ import subprocess
 import time
 import networkx.algorithms.bipartite as bp
 
-# TODO: Symmetry breaking: If two consecutive contractions have to node with red edges in common -> lex order
 class TwinWidthEncoding:
     def __init__(self):
         self.edge = None
@@ -74,7 +73,7 @@ class TwinWidthEncoding:
                     for k in range(1, len(g.nodes) + 1):
                         self.edge[k][i][j] = self.pool.id(f"edge{k}_{i}_{j}")
                         self.edge[k][j][i] = self.edge[k][i][j]
-        print("x")
+
     # def tmerge(self, i, j):
     #     if i < j:
     #         return self.merge[i][j]

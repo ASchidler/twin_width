@@ -3,8 +3,8 @@ import networkx as nx
 import bz2
 import shutil
 
-base_path = "/home/asc/Dev/graphs/treewidth_benchmarks/twlib-graphs"
-target = "/media/asc/4ED79AA0509E44AA/twlib-small"
+base_path = "twlib-graphs"
+target = "twlib-small"
 
 for r, d, f in os.walk(base_path):
     for cf in f:
